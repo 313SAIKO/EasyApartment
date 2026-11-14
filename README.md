@@ -22,7 +22,7 @@ EasyProperty/
 # 🚀 Tech Stack
 
 - Backend: NestJS + Mongoose
-- Frontend: Next.js 14 (App Router) + TypeScript + Tailwind
+- Frontend: Next.js 16 (App Router) + TypeScript + Tailwind
 - Database: MongoDB (Atlas recommended)
 - Auth: JWT
 
@@ -32,7 +32,7 @@ EasyProperty/
 
 Please install the following before starting:
 
-- Node.js **20 LTS**
+- Node.js **22 LTS or newer** (the backend imports the ESM-only `uuid@13`)
 - npm (comes with Node)
 - MongoDB Atlas account (or local MongoDB)
 
@@ -68,12 +68,10 @@ Install dependencies:
 npm install
 ```
 
-Create `.env` file inside `backend/`:
+Copy the example env file and fill in the values (see [Environment Variables Summary](#-environment-variables-summary)):
 
 ```
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_super_secret_key
-PORT=3000
+cp .env.example .env
 ```
 
 Run backend:
@@ -104,10 +102,10 @@ Install dependencies:
 npm install
 ```
 
-Create `.env.local` inside `frontend/`:
+Copy the example env file (the default value points at the local backend):
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:3000
+cp .env.example .env
 ```
 
 Run frontend:
@@ -122,7 +120,7 @@ Frontend will run on:
 http://localhost:3001
 ```
 
-(or 3000 if backend uses different port)
+The dev script pins the frontend to port 3001 so it doesn't clash with the backend on 3000. The backend's CORS setting only allows `http://localhost:3001`.
 
 ---
 
@@ -130,17 +128,29 @@ http://localhost:3001
 
 ## backend/.env
 
+| Variable | Required | Description |
+|---|---|---|
+| `PORT` | no | API port, default `3000` |
+| `MONGO_URI` | yes | MongoDB connection string |
+| `JWT_ACCESS_SECRET` | yes | Secret for access tokens |
+| `JWT_REFRESH_SECRET` | yes | Secret for refresh tokens (must differ from the access secret) |
+| `JWT_ACCESS_EXPIRATION` | no | Access token lifetime in seconds, default `900` |
+| `JWT_REFRESH_EXPIRATION` | no | Refresh token lifetime in seconds, default `604800` |
+| `CLOUDINARY_CLOUD_NAME` | for uploads | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | for uploads | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | for uploads | Cloudinary API secret |
+
+Generate a random secret with:
+
 ```
-MONGO_URI=
-JWT_SECRET=
-PORT=
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-## frontend/.env.local
+## frontend/.env
 
-```
-NEXT_PUBLIC_API_URL=
-```
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | yes | Backend base URL **including** `/api/v1`, e.g. `http://localhost:3000/api/v1` |
 
 ⚠️ Never commit `.env` files to Git.
 
@@ -221,6 +231,8 @@ Change backend PORT in `.env`
 
 ---
 
-# 👨‍💻 Contributors
+# Project Origins and Credits
 
-EasyProperty Team
+EasyApartment began as a student team project. This version is independently maintained by a member of the original team with the team's agreement.
+
+Credit for the original work goes to the EasyProperty Team. See the [original EasyApartment repository](https://github.com/kam345678/EasyApartment) for its contribution history.

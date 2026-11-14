@@ -89,5 +89,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "allowScripts": {
+    "argon2@0.44.0": true
   }
 }
