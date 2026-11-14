@@ -1,20 +1,87 @@
-import { AxiosError } from "axios";
-import axios from "axios";
+import axios, { type InternalAxiosRequestConfig } from "axios";
 
-let isRefreshing = false;
+type TokenPair = { access_token: string; refresh_token: string };
+type SessionRequest = InternalAxiosRequestConfig & {
+  sessionVersion?: number;
+  refreshToken?: string | null;
+  retried?: boolean;
+};
 
-const api = axios.create({
-  baseURL: `${process.env.NEXT_PUBLIC_API_URL}`,
-});
+type SignInResult = TokenPair & {
+  user: { id: string; email: string; role: string };
+};
 
-// 🔐 แนบ accessToken อัตโนมัติ
-api.interceptors.request.use((config) => {
+const baseURL = process.env.NEXT_PUBLIC_API_URL;
+const api = axios.create({ baseURL });
+const authApi = axios.create({ baseURL });
+
+let sessionVersion = 0;
+let refreshInFlight: { token: string; promise: Promise<void> } | undefined;
+let refreshedToken: string | undefined;
+
+function saveTokens(tokens: TokenPair) {
+  localStorage.setItem("accessToken", tokens.access_token);
+  localStorage.setItem("refreshToken", tokens.refresh_token);
+}
+
+function clearTokens() {
+  sessionVersion += 1;
+  refreshedToken = undefined;
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+}
+
+function isTokenPair(data: TokenPair | null | undefined): data is TokenPair {
+  return (
+    typeof data?.access_token === "string" &&
+    data.access_token.length > 0 &&
+    typeof data.refresh_token === "string" &&
+    data.refresh_token.length > 0
+  );
+}
+
+function refreshSession(token: string) {
+  if (refreshInFlight?.token === token) return refreshInFlight.promise;
+
+  const version = sessionVersion;
+  const promise = authApi
+    .post<TokenPair>("/auth/refresh", {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then(({ data }) => {
+      if (!isTokenPair(data)) throw new Error("Invalid refresh response");
+      if (version !== sessionVersion || localStorage.getItem("refreshToken") !== token) {
+        throw new Error("Session changed during refresh");
+      }
+      saveTokens(data);
+      refreshedToken = data.refresh_token;
+    })
+    .catch((error: unknown) => {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if ((status === 401 || status === 403) && version === sessionVersion && localStorage.getItem("refreshToken") === token) {
+        clearTokens();
+        if (window.location.pathname !== "/login") window.location.replace("/login");
+      }
+      throw error;
+    })
+    .finally(() => {
+      if (refreshInFlight?.promise === promise) refreshInFlight = undefined;
+    });
+
+  refreshInFlight = { token, promise };
+  return promise;
+}
+
+api.interceptors.request.use((config: SessionRequest) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("accessToken");
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (config.retried && config.sessionVersion !== sessionVersion) {
+      throw new Error("Session changed before retry");
     }
+    config.sessionVersion = sessionVersion;
+    config.refreshToken = localStorage.getItem("refreshToken");
+    const token = localStorage.getItem("accessToken");
+    if (token) config.headers.set("Authorization", `Bearer ${token}`);
+    else config.headers.delete("Authorization");
   }
 
   return config;
@@ -22,95 +89,59 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      // ❌ ไม่ต้อง refresh ถ้าเป็นหน้า login หรือเรียก signin อยู่
-      if (
-        originalRequest.url?.includes("/auth/signin") ||
-        (typeof window !== "undefined" && window.location.pathname === "/login")
-      ) {
-        return Promise.reject(error);
-      }
-      // ❌ ถ้าเป็น request refresh เอง ให้ logout ทันที (กัน loop)
-      if (originalRequest.url?.includes("/auth/refresh")) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
-
-      if (isRefreshing) {
-        return Promise.reject(error);
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      const refreshToken = localStorage.getItem("refreshToken");
-
-      if (!refreshToken) {
-        window.location.href = "/login";
-        return Promise.reject(error);
-      }
-
-      try {
-        const res = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-          {},
-          {
-            headers: {
-              Authorization: `Bearer ${refreshToken}`,
-            },
-          }
-        );
-
-        const newAccessToken = res.data.accessToken;
-        localStorage.setItem("accessToken", newAccessToken);
-
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-
-        isRefreshing = false;
-
-        return api(originalRequest);
-      } catch (refreshError) {
-        isRefreshing = false;
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
-      }
+  async (error: unknown) => {
+    if (
+      typeof window === "undefined" ||
+      !axios.isAxiosError(error) ||
+      error.response?.status !== 401
+    ) {
+      throw error;
     }
 
-    return Promise.reject(error);
+    const config: SessionRequest | undefined = error.config;
+    const token = localStorage.getItem("refreshToken");
+    const accessToken = localStorage.getItem("accessToken");
+    if (!config || config.retried || config.sessionVersion !== sessionVersion || !token) {
+      throw error;
+    }
+
+    config.retried = true;
+    if (config.refreshToken === token) {
+      await refreshSession(token);
+    } else if (token !== refreshedToken || !accessToken) {
+      throw error;
+    }
+
+    if (config.sessionVersion !== sessionVersion) throw error;
+    return api.request(config);
   },
 );
 
 export async function signIn(email: string, password: string) {
   try {
-    const res = await api.post("/auth/signin", {
-      email,
-      password,
-    });
+    const { data } = await authApi.post<SignInResult>("/auth/signin", { email, password });
+    if (!isTokenPair(data) || !data.user) return { error: "Login response ไม่ถูกต้อง" };
 
-    return res.data;
-  } catch (err: unknown) {
-    const error = err as AxiosError<any>;
-    const message = (error.response?.data as any)?.message || "Login failed";
-
-    return { error: message };
+    sessionVersion += 1;
+    refreshedToken = undefined;
+    saveTokens(data);
+    return { user: data.user };
+  } catch (error: unknown) {
+    const message = axios.isAxiosError<{ message?: string | string[] }>(error)
+      ? error.response?.data?.message
+      : undefined;
+    return { error: (Array.isArray(message) ? message[0] : message) || "Login failed" };
   }
 }
 
 export async function logout() {
+  const version = sessionVersion;
   try {
-    await api.post("/auth/logout");
-  } catch (error) {
-    console.error("Logout API failed:", error);
+    if (localStorage.getItem("accessToken") || localStorage.getItem("refreshToken")) {
+      await api.post("/auth/logout");
+    }
   } finally {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+    if (version === sessionVersion) clearTokens();
   }
 }
 

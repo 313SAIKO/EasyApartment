@@ -16,6 +16,7 @@ import { AuthDto } from './dto/auth.dto';
 import * as argon2 from 'argon2';
 
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class AuthService {
@@ -54,6 +55,7 @@ export class AuthService {
       this.jwtService.signAsync(payload, {
         secret: refreshSecret,
         expiresIn: refreshExp,
+        jwtid: randomUUID(),
       }),
     ]);
 
@@ -124,14 +126,7 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(
-    userId: string,
-    email: string,
-    role: string,
-    refreshToken: string,
-  ) {
-    if (!refreshToken) throw new ForbiddenException('Access denied');
-
+  async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.usersService.findByIdWithRefresh(userId);
 
     if (!user?.refreshTokenHash) throw new ForbiddenException('Access denied');
@@ -140,11 +135,18 @@ export class AuthService {
 
     if (!matches) throw new ForbiddenException('Access denied');
 
-    const tokens = await this.signTokens({ id: userId, email, role });
-
-    // Rotation: refresh token ใหม่ต้องถูกเก็บ hash ใหม่ทับตัวเก่า
-
-    await this.storeRefreshHash(userId, tokens.refresh_token);
+    const tokens = await this.signTokens({
+      id: userId,
+      email: user.email,
+      role: user.role,
+    });
+    const hash = await argon2.hash(tokens.refresh_token);
+    const rotated = await this.usersService.replaceRefreshTokenHash(
+      userId,
+      user.refreshTokenHash,
+      hash,
+    );
+    if (!rotated) throw new ForbiddenException('Access denied');
 
     return tokens;
   }

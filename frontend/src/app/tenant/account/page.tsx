@@ -63,8 +63,6 @@ export default function Account() {
   useEffect(() => {
     async function fetchUser() {
       try {
-        const token = localStorage.getItem("accessToken");
-        if (!token) return;
 
         const profile = await getProfile();
         const resolvedUser = profile?.user ? profile.user : profile;

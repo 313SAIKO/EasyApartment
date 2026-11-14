@@ -60,6 +60,20 @@ export class UsersService {
       .exec();
   }
 
+  async replaceRefreshTokenHash(
+    userId: string,
+    previousHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const result = await this.userModel
+      .updateOne(
+        { _id: userId, refreshTokenHash: previousHash },
+        { $set: { refreshTokenHash: nextHash } },
+      )
+      .exec();
+    return result.matchedCount === 1;
+  }
+
   // อัพเดทบทบาทผู้ใช้
   setRole(userId: string, role: UserRole) {
     return this.userModel.updateOne({ _id: userId }, { role }).exec();

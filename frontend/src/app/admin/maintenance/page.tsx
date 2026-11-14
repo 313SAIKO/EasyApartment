@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import ModalAlert from "@/components/ModalAlert"
+import api from "@/lib/api"
 
 interface MaintenanceItem {
   id: string
@@ -66,15 +67,7 @@ export default function AdminMaintenancePage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("accessToken")
-
-      const res = await fetch("http://localhost:3000/api/v1/maintenance", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      const result = await res.json()
+      const { data: result } = await api.get("/maintenance")
 
       const formatted: MaintenanceItem[] = result.map((item: any) => ({
         id: item._id,
@@ -101,26 +94,7 @@ export default function AdminMaintenancePage() {
 
   const handleComplete = async (id: string) => {
     try {
-      const token = localStorage.getItem("accessToken")
-
-      const res = await fetch(
-        `http://localhost:3000/api/v1/maintenance/${id}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status: "completed" }),
-        }
-      )
-
-      if (!res.ok) {
-        setAlertType("error")
-        setAlertMessage("อัปเดตสถานะไม่สำเร็จ")
-        setAlertOpen(true)
-        return
-      }
+      await api.patch(`/maintenance/${id}/status`, { status: "completed" })
 
       setData((prev) =>
         prev.map((item) =>
@@ -136,6 +110,9 @@ export default function AdminMaintenancePage() {
       setAlertOpen(true)
     } catch (error) {
       console.error(error)
+      setAlertType("error")
+      setAlertMessage("อัปเดตสถานะไม่สำเร็จ")
+      setAlertOpen(true)
     }
   }
 
@@ -144,24 +121,7 @@ export default function AdminMaintenancePage() {
     setAlertMessage("คุณแน่ใจหรือไม่ว่าต้องการลบงานนี้?")
     setAlertConfirmAction(() => async () => {
       try {
-        const token = localStorage.getItem("accessToken")
-
-        const res = await fetch(
-          `http://localhost:3000/api/v1/maintenance/${id}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        )
-
-        if (!res.ok) {
-          setAlertType("error")
-          setAlertMessage("ลบงานไม่สำเร็จ")
-          setAlertConfirmAction(undefined)
-          return
-        }
+        await api.delete(`/maintenance/${id}`)
 
         setData((prev) => prev.filter((item) => item.id !== id))
         setSelectedItem(null)

@@ -1,14 +1,8 @@
 import api from "./api";
 
 export async function getProfile() {
-  const token = localStorage.getItem("accessToken");
-
   try {
-    const res = await api.get("/auth/profile", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const res = await api.get("/auth/profile");
 
     return res.data;
   } catch {

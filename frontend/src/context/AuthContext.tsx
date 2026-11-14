@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import api from '@/lib/api'
+import api, { logout as endSession, signIn } from '@/lib/api'
 
 type User = { id?: string | number; name?: string | null; email?: string | null; role?: string } | null
 
@@ -26,7 +26,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const { data } = await api.get('/auth/profile')
         setUser(data?.user ? data.user : data)
-      } catch (err) {
+      } catch {
         setUser(null)
       } finally {
         setLoading(false)
@@ -37,29 +37,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, [])
 
   const login = async (email: string, password: string) => {
-    try {
-      const { data } = await api.post('/auth/login', {
-        email,
-        password,
-      })
-
-      setUser(data?.user ? data.user : data)
-      return { ok: true }
-    } catch (err: any) {
-      return {
-        ok: false,
-        message:
-          err.response?.data?.message || 'Authentication failed',
-      }
-    }
+    const result = await signIn(email, password)
+    if (!result.user) return { ok: false, message: result.error }
+    setUser(result.user)
+    return { ok: true }
   }
 
   const logout = async () => {
     try {
-      await api.post('/auth/logout')
-    } catch (e) {}
-    setUser(null)
-    router.push('/login')
+      await endSession()
+    } catch {
+      window.alert('ออกจากระบบบนเครื่องนี้แล้ว แต่ติดต่อเซิร์ฟเวอร์เพื่อยืนยันการออกจากระบบไม่สำเร็จ')
+    } finally {
+      setUser(null)
+      router.push('/login')
+    }
   }
 
   return (

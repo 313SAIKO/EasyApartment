@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 
 import ModalAlert from "@/components/ModalAlert"
+import axios from "axios"
+import api from "@/lib/api"
 
 export default function RegisterTenantPage() {
   const [formData, setFormData] = useState({
@@ -31,17 +33,10 @@ export default function RegisterTenantPage() {
   const [alertType, setAlertType] = useState<"success" | "error" | "info">("info")
   const [alertMessage, setAlertMessage] = useState("")
 
-  // ✅ ตั้งค่าพอร์ตให้ตรงกับ Backend
-  const BACKEND_URL = "http://localhost:3000/api/v1";
-
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${BACKEND_URL}/rooms`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await response.json();
+        const { data: result } = await api.get('/rooms');
         
         // ดักจับข้อมูลจากหลายรูปแบบ
         const data = Array.isArray(result) ? result : (result.data || result.rooms || []);
@@ -87,16 +82,6 @@ export default function RegisterTenantPage() {
     }
 
     setIsLoading(true)
-    const currentToken = localStorage.getItem('accessToken');
-
-    if (!currentToken) {
-        setAlertType("error")
-        setAlertMessage("ไม่พบรหัสเข้าใช้งาน (Token) กรุณา Login ใหม่")
-        setAlertOpen(true)
-        setIsLoading(false);
-        return;
-    }
-
     try {
       // --- STEP 1: สร้าง USER ---
       const userPayload = {
@@ -112,17 +97,7 @@ export default function RegisterTenantPage() {
         }
       }
 
-      const userRes = await fetch(`${BACKEND_URL}/users/admin/create-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`
-        },
-        body: JSON.stringify(userPayload),
-      })
-
-      const userResult = await userRes.json()
-      if (!userRes.ok) throw new Error(userResult.message || "สร้าง User ไม่สำเร็จ");
+      const { data: userResult } = await api.post('/users/admin/create-user', userPayload)
 
       const newUserId = userResult.user?._id; 
       const tempPass = userResult.temporaryPassword;
@@ -146,16 +121,7 @@ export default function RegisterTenantPage() {
         createdAt: new Date().toISOString()
       }
 
-      const contractRes = await fetch(`${BACKEND_URL}/contracts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentToken}`
-        },
-        body: JSON.stringify(contractPayload),
-      })
-
-      if (!contractRes.ok) throw new Error("สร้างสัญญาไม่สำเร็จ");
+      await api.post('/contracts', contractPayload)
 
       setRegistrationResult({
         username: userResult.user?.email || formData.email,
@@ -165,9 +131,12 @@ export default function RegisterTenantPage() {
       setAlertMessage("ลงทะเบียนผู้เช่าสำเร็จ!")
       setAlertOpen(true)
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = axios.isAxiosError<{ message?: string | string[] }>(error)
+        ? error.response?.data?.message
+        : error instanceof Error ? error.message : undefined
       setAlertType("error")
-      setAlertMessage(error.message || "เกิดข้อผิดพลาด")
+      setAlertMessage((Array.isArray(message) ? message.join(', ') : message) || "เกิดข้อผิดพลาด")
       setAlertOpen(true)
     } finally {
       setIsLoading(false)

@@ -25,13 +25,10 @@ export default function Home() {
       }
 
       // กันกรณี structure ไม่ถูกต้อง
-      if (!data?.access_token || !data?.user) {
+      if (!data.user) {
         setError("Login response ไม่ถูกต้อง");
         return;
       }
-
-      localStorage.setItem("accessToken", data.access_token);
-      localStorage.setItem("refreshToken", data.refresh_token);
 
       if (data.user.role === "admin") {
         window.location.href = "/admin";
@@ -39,8 +36,8 @@ export default function Home() {
         window.location.href = "/tenant/dashboard";
       }
 
-    } catch (err:any) {
-      setError(err?.message || "Login failed");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Login failed");
     }
   }
   return (

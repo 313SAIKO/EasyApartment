@@ -1,17 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { LogOut, Home, FileText, Wrench, User, Hash, CreditCard, AlertTriangle } from "lucide-react";
-import { logout } from '@/lib/api'
+import { useAuth } from '@/context/AuthContext'
 import { useEffect, useState } from "react";
 import { getMyContract } from "@/services/contracts.service";
 import { invoiceService } from "@/services/invoice.service";
 import ModalAlert from "@/components/ModalAlert";
 
 export default function TenantDashboard() {
-  const router = useRouter();
   const pathname = usePathname();
+  const { logout } = useAuth();
 
   const [roomNumber, setRoomNumber] = useState<string>("-");
   const [tenantName, setTenantName] = useState<string>("ผู้เช่า");
@@ -27,15 +27,7 @@ export default function TenantDashboard() {
   const handleLogout = () => {
     setAlertType("info");
     setAlertMessage("คุณแน่ใจที่ต้องการออกจากระบบหรือไม่?");
-    setAlertConfirmAction(() => async () => {
-      try {
-        await logout();
-        router.push("/login");
-      } catch (error) {
-        console.error("Logout error:", error);
-        router.push("/login");
-      }
-    });
+    setAlertConfirmAction(() => logout);
     setAlertOpen(true);
   };
 

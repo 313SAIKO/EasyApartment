@@ -7,6 +7,7 @@ import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { hash } from 'argon2';
 import { ContractsController } from '../../contracts/contracts.controller';
 import { ContractsService } from '../../contracts/contracts.service';
 import { InvoicesController } from '../../invoices/invoices.controller';
@@ -14,12 +15,19 @@ import { InvoicesService } from '../../invoices/invoices.service';
 import { RoomsController } from '../../rooms/rooms.controller';
 import { RoomsService } from '../../rooms/rooms.service';
 import { UploadService } from '../../upload/upload.service';
+import { UsersService } from '../../users/users.service';
+import { AuthController } from '../auth.controller';
+import { AuthService } from '../auth.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
+import { RefreshStrategy } from '../strategies/refresh.strategy';
 
 jest.mock('uuid', () => ({ v4: jest.fn() }));
 
+type TokenPair = { access_token: string; refresh_token: string };
+
 describe('Apartment resource access', () => {
   const secret = 'resource-access-test-only';
+  const refreshSecret = 'refresh-test-only';
   const tenantA = '000000000000000000000001';
   const tenantB = '000000000000000000000002';
   const admin = '000000000000000000000003';
@@ -53,23 +61,82 @@ describe('Apartment resource access', () => {
   const rooms = [{ _id: '000000000000000000000021', roomNumber: '101' }];
   const jwt = new JwtService({ secret });
   const token = (sub: string, role = 'tenant') => jwt.sign({ sub, role });
+  const credentials = {
+    email: 'tenant@example.invalid',
+    password: 'test-password',
+  };
+  const user = {
+    _id: tenantA,
+    email: credentials.email,
+    role: 'tenant',
+    passwordHash: '',
+    refreshTokenHash: null as string | null,
+  };
   let app: INestApplication<App>;
 
   beforeAll(async () => {
+    user.passwordHash = await hash(credentials.password);
     const moduleRef = await Test.createTestingModule({
       imports: [
         PassportModule,
         ConfigModule.forRoot({
           ignoreEnvFile: true,
           skipProcessEnv: true,
-          load: [() => ({ JWT_ACCESS_SECRET: secret })],
+          load: [
+            () => ({
+              JWT_ACCESS_SECRET: secret,
+              JWT_REFRESH_SECRET: refreshSecret,
+            }),
+          ],
         }),
       ],
-      controllers: [InvoicesController, ContractsController, RoomsController],
+      controllers: [
+        AuthController,
+        InvoicesController,
+        ContractsController,
+        RoomsController,
+      ],
       providers: [
+        AuthService,
+        JwtService,
         JwtStrategy,
+        RefreshStrategy,
         InvoicesService,
         ContractsService,
+        UsersService,
+        {
+          provide: getModelToken('User'),
+          useValue: {
+            findOne: () => ({
+              select: () => ({ exec: async () => ({ ...user }) }),
+            }),
+            findById: () => ({
+              select: () => ({ exec: async () => ({ ...user }) }),
+            }),
+            updateOne: (
+              filter: { _id: string; refreshTokenHash?: string },
+              update: {
+                refreshTokenHash?: string | null;
+                $set?: { refreshTokenHash: string };
+              },
+            ) => ({
+              exec: async () => {
+                if (
+                  filter._id !== user._id ||
+                  (filter.refreshTokenHash !== undefined &&
+                    filter.refreshTokenHash !== user.refreshTokenHash)
+                ) {
+                  return { matchedCount: 0 };
+                }
+                user.refreshTokenHash =
+                  update.$set?.refreshTokenHash ??
+                  update.refreshTokenHash ??
+                  null;
+                return { matchedCount: 1 };
+              },
+            }),
+          },
+        },
         {
           provide: getModelToken('Invoice'),
           useValue: {
@@ -102,6 +169,44 @@ describe('Apartment resource access', () => {
 
   afterAll(async () => {
     await app?.close();
+  });
+
+  it('renews access to an invoice and rejects the refresh token after logout', async () => {
+    const http = request(app.getHttpServer());
+    const invoicePath = `/api/v1/invoices/${recordA._id}`;
+    const refresh = (value: string) =>
+      http.post('/api/v1/auth/refresh').auth(value, { type: 'bearer' });
+    const response = await http
+      .post('/api/v1/auth/signin')
+      .send(credentials)
+      .expect(201);
+    const initial = response.body as TokenPair;
+    const expired = jwt.sign(
+      { sub: tenantA, role: 'tenant' },
+      { expiresIn: -1 },
+    );
+    await http.get(invoicePath).auth(expired, { type: 'bearer' }).expect(401);
+
+    const attempts = await Promise.all([
+      refresh(initial.refresh_token),
+      refresh(initial.refresh_token),
+    ]);
+    expect(attempts.map((response) => response.status).sort()).toEqual([
+      201, 403,
+    ]);
+    const renewed = attempts.find((response) => response.status === 201)
+      ?.body as TokenPair;
+    expect(renewed.refresh_token).not.toBe(initial.refresh_token);
+    await http
+      .get(invoicePath)
+      .auth(renewed.access_token, { type: 'bearer' })
+      .expect(200, recordA);
+    await refresh(initial.refresh_token).expect(403);
+    await http
+      .post('/api/v1/auth/logout')
+      .auth(renewed.access_token, { type: 'bearer' })
+      .expect(201, { success: true });
+    await refresh(renewed.refresh_token).expect(403);
   });
 
   it.each(['invoices', 'contracts'])(

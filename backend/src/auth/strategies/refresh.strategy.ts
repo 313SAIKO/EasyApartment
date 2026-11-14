@@ -1,13 +1,14 @@
 // src/auth/strategies/refrech.strategy.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 
 import { PassportStrategy } from '@nestjs/passport';
 
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 
-type JwtPayload = { sub: string; email: string; role: string };
+import { isObjectIdOrHexString } from 'mongoose';
+import type { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
 export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
@@ -23,12 +24,15 @@ export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     });
   }
 
-  // เพิ่ม req เป็นพารามิเตอร์ในฟังก์ชัน validate
-
   validate(req: Request, payload: JwtPayload) {
-    const authHeader = req.get('authorization');
-
-    const refreshToken = authHeader?.replace('Bearer', '').trim();
+    const refreshToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    if (
+      !refreshToken ||
+      typeof payload.sub !== 'string' ||
+      !isObjectIdOrHexString(payload.sub)
+    ) {
+      throw new UnauthorizedException();
+    }
 
     return { ...payload, refreshToken };
   }

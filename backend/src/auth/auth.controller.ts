@@ -13,6 +13,7 @@ import { AccessTokenGuard } from './guards/access-token.guard';
 import { RefreshTokenGuard } from './guards/refresh-token.guard';
 
 import { Throttle } from '@nestjs/throttler';
+import type { JwtPayload } from './types/jwt-payload.type';
 
 @Controller('auth')
 export class AuthController {
@@ -47,17 +48,17 @@ export class AuthController {
   refresh(
     @Req()
     req: Request & {
-      user: { sub: string; email: string; role: string; refreshToken: string };
+      user: JwtPayload & { refreshToken: string };
     },
   ) {
-    const { sub: userId, email, role, refreshToken } = req.user;
+    const { sub: userId, refreshToken } = req.user;
 
-    return this.authService.refreshTokens(userId, email, role, refreshToken);
+    return this.authService.refreshTokens(userId, refreshToken);
   }
 
   @UseGuards(AccessTokenGuard)
   @Post('logout')
-  logout(@Req() req: Request & { user: { userId: string } }) {
-    return this.authService.logout(req.user.userId);
+  logout(@Req() req: Request & { user: JwtPayload }) {
+    return this.authService.logout(req.user.sub);
   }
 }
