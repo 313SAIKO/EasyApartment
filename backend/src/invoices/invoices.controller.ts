@@ -8,26 +8,25 @@ import {
   Req,
   UseInterceptors,
   UploadedFile,
+  UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { PayInvoiceDto } from './dto/pay-invoice.dto';
 import { ConfirmInvoiceDto } from './dto/confirm-invoice.dto';
-import { UploadService } from '../upload/upload.service';
-import { UseGuards } from '@nestjs/common';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { JwtPayload } from '../auth/types/jwt-payload.type';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+
+type AuthenticatedRequest = Request & { user: JwtPayload };
 
 @Controller('invoices')
 @UseGuards(AccessTokenGuard, RolesGuard)
 export class InvoicesController {
-  constructor(
-    private readonly invoicesService: InvoicesService,
-    private readonly uploadService: UploadService,
-  ) {}
+  constructor(private readonly invoicesService: InvoicesService) {}
 
   // Admin: create monthly invoice
   @Post()
@@ -44,20 +43,9 @@ export class InvoicesController {
     @Param('id') invoiceId: string,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: PayInvoiceDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    if (!file) {
-      throw new Error('Slip file is required');
-    }
-
-    const uploadResult: any = await this.uploadService.uploadImage(
-      file,
-      'invoice-slips',
-    );
-
-    dto.slipUrl = uploadResult.secure_url;
-    dto.slipId = uploadResult.public_id;
-
-    return this.invoicesService.pay(invoiceId, dto);
+    return this.invoicesService.pay(invoiceId, req.user.sub, file, dto.paidAt);
   }
 
   // Admin: confirm or reject payment
@@ -66,30 +54,26 @@ export class InvoicesController {
   async confirm(
     @Param('id') invoiceId: string,
     @Body() dto: ConfirmInvoiceDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    const user = req.user as JwtPayload;
-
-    if (!user?.sub) {
-      throw new Error('Admin ID missing from token');
-    }
-
-    return this.invoicesService.confirm(invoiceId, user.sub, dto.status);
+    return this.invoicesService.confirm(invoiceId, req.user.sub, dto.status);
   }
 
   @Roles('tenant')
   @Get('my')
-  getMyInvoices(@Req() req) {
+  getMyInvoices(@Req() req: AuthenticatedRequest) {
     return this.invoicesService.getInvoicesByTenant(req.user.sub);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.invoicesService.findOne(id);
+  @Roles('admin', 'tenant')
+  async findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.invoicesService.findOne(id, req.user);
   }
 
   // Admin: list all invoices
   @Get()
+  @Roles('admin')
   async findAll() {
     return this.invoicesService.findAll();
   }

@@ -59,7 +59,7 @@ export class RoomsService {
     // ดึงห้องพักทั้งหมดพร้อมข้อมูลผู้เช่า
     const rooms = await this.roomModel
       .find(filter)
-      .populate('currentTenant', 'profile email role')
+      .populate('currentTenant', 'profile.fullName profile.phone email role')
       .sort({ floor: 1, roomNumber: 1 })
       .lean() // ใช้ lean เพื่อให้ได้ Plain Object (เร็วและกินแรมลดลง)
       .exec();
@@ -126,7 +126,7 @@ export class RoomsService {
 
     const room = await this.roomModel
       .findById(id)
-      .populate('currentTenant', 'profile email')
+      .populate('currentTenant', 'profile.fullName profile.phone email')
       .lean()
       .exec();
 

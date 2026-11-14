@@ -9,9 +9,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Request } from 'express';
 import { UploadService } from './upload.service';
 import { UsersService } from '../users/users.service';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 
 @Controller('upload')
 export class UploadController {
@@ -28,7 +30,7 @@ export class UploadController {
   async uploadFile(
     @Param('type') type: string,
     @UploadedFile() file: Express.Multer.File,
-    @Req() req: any,
+    @Req() req: Request & { user: JwtPayload },
   ) {
     const allowedTypes = ['avatars', 'slips', 'maintenance'];
 
@@ -40,10 +42,7 @@ export class UploadController {
       throw new BadRequestException('File is required');
     }
 
-    const result: any = await this.uploadService.uploadImage(file, type);
-
-    console.log(result);
-    console.log('USER ID:', req.user);
+    const result = await this.uploadService.uploadImage(file, type);
 
     return this.usersService.updateAvatar(
       req.user.sub,

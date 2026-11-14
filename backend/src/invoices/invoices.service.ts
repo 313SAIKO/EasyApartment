@@ -2,21 +2,26 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Invoice } from './schemas/invoice.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
-import { PayInvoiceDto } from './dto/pay-invoice.dto';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { Contract } from '../contracts/schemas/contract.schema';
 import { Room } from '../rooms/schema/room.schema';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class InvoicesService {
+  private readonly logger = new Logger(InvoicesService.name);
+
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<Invoice>,
     @InjectModel(Contract.name) private contractModel: Model<Contract>,
     @InjectModel(Room.name) private roomModel: Model<Room>,
+    private readonly uploadService: UploadService,
   ) {}
 
   // Admin creates monthly invoice
@@ -86,18 +91,49 @@ export class InvoicesService {
   }
 
   // Tenant uploads slip
-  async pay(invoiceId: string, dto: PayInvoiceDto) {
-    const invoice = await this.invoiceModel.findById(invoiceId);
-    if (!invoice) throw new NotFoundException('Invoice not found');
+  async pay(
+    invoiceId: string,
+    tenantId: string,
+    file: Express.Multer.File,
+    paidAt: string,
+  ) {
+    if (!Types.ObjectId.isValid(invoiceId)) {
+      throw new NotFoundException('Invoice not found');
+    }
 
-    invoice.payment = {
-      status: 'paid_pending_review',
-      slipUrl: dto.slipUrl,
-      slipId: dto.slipId,
-      paidAt: new Date(dto.paidAt),
-    };
+    const filter = { _id: invoiceId, tenantId };
+    if (!(await this.invoiceModel.exists(filter))) {
+      throw new NotFoundException('Invoice not found');
+    }
 
-    return invoice.save();
+    const upload = await this.uploadService.uploadImage(file, 'invoice-slips');
+    const invoice = await this.invoiceModel
+      .findOneAndUpdate(
+        filter,
+        {
+          $set: {
+            payment: {
+              status: 'paid_pending_review',
+              slipUrl: upload.secure_url,
+              slipId: upload.public_id,
+              paidAt: new Date(paidAt),
+            },
+          },
+        },
+        { new: true, runValidators: true },
+      )
+      .exec();
+
+    if (!invoice) {
+      try {
+        await this.uploadService.deleteImage(upload.public_id);
+      } catch {
+        this.logger.warn('Failed to remove an unassociated payment slip');
+      }
+      throw new NotFoundException('Invoice not found');
+    }
+
+    return invoice;
   }
 
   // Admin confirms or rejects payment
@@ -122,9 +158,15 @@ export class InvoicesService {
       .exec();
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: JwtPayload) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const filter =
+      user.role === 'admin' ? { _id: id } : { _id: id, tenantId: user.sub };
     const invoice = await this.invoiceModel
-      .findById(id)
+      .findOne(filter)
       .populate('roomId tenantId contractId payment.confirmedBy')
       .exec();
 

@@ -2,7 +2,6 @@ import api from "./api";
 
 export async function getProfile() {
   const token = localStorage.getItem("accessToken");
-  console.log("TOKEN:", token);
 
   try {
     const res = await api.get("/auth/profile", {
@@ -11,14 +10,8 @@ export async function getProfile() {
       },
     });
 
-    console.log("STATUS:", res.status);
-    console.log("RESPONSE:", res.data);
-
     return res.data;
-  } catch (error: any) {
-    console.log("ERROR STATUS:", error.response?.status);
-    console.log("ERROR RESPONSE:", error.response?.data);
-
+  } catch {
     return null;
   }
 }

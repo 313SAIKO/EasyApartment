@@ -9,14 +9,18 @@ import {
   Patch,
   Delete,
   Req,
+  UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UseGuards } from '@nestjs/common';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+
+type AuthenticatedRequest = Request & { user: JwtPayload };
 
 @Controller('contracts')
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -37,15 +41,15 @@ export class ContractsController {
 
   @Get('me')
   @Roles('tenant')
-  getMyContract(@Req() req: any) {
+  getMyContract(@Req() req: AuthenticatedRequest) {
     const userId = req.user.sub;
     return this.contractsService.findByTenantId(userId);
   }
 
   @Get(':id')
   @Roles('admin', 'tenant')
-  findOne(@Param('id') id: string) {
-    return this.contractsService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.contractsService.findOne(id, req.user);
   }
 
   @Patch(':id')

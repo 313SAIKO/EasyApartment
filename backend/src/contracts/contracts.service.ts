@@ -2,7 +2,8 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { Contract, ContractDocument } from './schemas/contract.schema';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { UpdateContractDto } from './dto/update-contract.dto';
@@ -68,11 +69,18 @@ export class ContractsService {
       .exec();
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: JwtPayload) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException('Contract not found');
+    }
+
+    const filter =
+      user.role === 'admin' ? { _id: id } : { _id: id, tenantId: user.sub };
     const contract = await this.contractModel
-      .findById(id)
+      .findOne(filter)
       .populate('roomId')
-      .populate('tenantId');
+      .populate('tenantId')
+      .exec();
 
     if (!contract) {
       throw new NotFoundException('Contract not found');

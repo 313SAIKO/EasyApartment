@@ -41,12 +41,6 @@ export class UserController {
     @Body('newPassword') newPassword: string,
     @Body('confirmNewpassword') confirmNewpassword: string,
   ) {
-    console.log('CHANGE PASSWORD HIT');
-    console.log('USER FROM TOKEN:', req.user);
-    console.log('OLD PASSWORD:', oldPassword);
-    console.log('NEW PASSWORD:', newPassword);
-    console.log('CONFIRM PASSWROD', confirmNewpassword);
-
     return this.usersService.changePassword(
       req.user.sub,
       oldPassword,
@@ -60,9 +54,6 @@ export class UserController {
   @Roles('tenant', 'admin')
   @Patch('me/avatar')
   updateMyAvatar(@Req() req: JwtRequest, @Body() dto: UpdateAvatarDto) {
-    console.log('BODY avatarUrl:', dto.avatarUrl);
-    console.log('BODY avatarPublicId:', dto.avatarPublicId);
-
     return this.usersService.updateAvatar(
       req.user.sub,
       dto.avatarUrl,

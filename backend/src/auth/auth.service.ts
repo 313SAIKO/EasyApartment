@@ -156,9 +156,7 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    console.log('JWT userId:', userId);
     const user = await this.usersService.findById(userId);
-    console.log('DB user:', user);
     if (!user) {
       throw new ForbiddenException('User not found');
     }

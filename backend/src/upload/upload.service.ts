@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
+import type { UploadApiResponse } from 'cloudinary';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -19,7 +20,7 @@ export class UploadService {
     }
 
     const uniqueFileName = uuidv4();
-    return new Promise((resolve, reject) => {
+    return new Promise<UploadApiResponse>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
           {
@@ -29,6 +30,8 @@ export class UploadService {
           },
           (error, result) => {
             if (error) return reject(error);
+            if (!result)
+              return reject(new Error('Cloudinary returned no upload result'));
             resolve(result);
           },
         )

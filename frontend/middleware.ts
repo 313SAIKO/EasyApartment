@@ -45,7 +45,6 @@ export function middleware(request: NextRequest) {
   }
 
   const decoded = parseJwt(token);
-  console.log("DECODED:", decoded);
 
   if (!decoded || !decoded.role) {
     console.log("INVALID TOKEN → LOGIN");

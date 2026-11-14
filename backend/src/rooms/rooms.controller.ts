@@ -13,24 +13,22 @@ import {
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { RoomStatus } from './schema/room.schema';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('rooms')
+@UseGuards(AccessTokenGuard, RolesGuard)
+@Roles('admin')
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
-  @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles('admin')
   @Post()
   create(@Body() createRoomDto: CreateRoomDto) {
     return this.roomsService.create(createRoomDto);
   }
 
   // ✅ สร้างหลายห้องพร้อมกัน (Bulk Create)
-  @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles('admin')
   @Post('bulk')
   async createMany(@Body() createRoomDtos: CreateRoomDto[]) {
     if (!Array.isArray(createRoomDtos) || createRoomDtos.length === 0) {
@@ -50,7 +48,10 @@ export class RoomsController {
   }
 
   @Get()
-  findAll(@Query('status') status?: RoomStatus) {
+  findAll(
+    @Query('status', new ParseEnumPipe(RoomStatus, { optional: true }))
+    status?: RoomStatus,
+  ) {
     return this.roomsService.findAll(status);
   }
 
@@ -60,8 +61,6 @@ export class RoomsController {
   }
 
   // ✅ แก้ไขตรงนี้: รับเป็น Object เพื่อแก้ Error 400
-  @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles('admin')
   @Patch(':id/amenities')
   async updateAmenities(
     @Param('id') id: string,
@@ -76,8 +75,6 @@ export class RoomsController {
     return this.roomsService.updateAmenities(id, body.amenities);
   }
 
-  @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles('admin')
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

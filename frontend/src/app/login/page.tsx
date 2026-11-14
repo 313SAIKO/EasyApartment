@@ -15,7 +15,6 @@ export default function Home() {
     setError(null);
     try {
       const data = await signIn(email, password);
-      console.log("Login response:", data);
 
       // ถ้า backend ส่ง error กลับมา
       if (data?.error) {
@@ -41,7 +40,6 @@ export default function Home() {
       }
 
     } catch (err:any) {
-      console.error("ERROR:", err);
       setError(err?.message || "Login failed");
     }
   }
