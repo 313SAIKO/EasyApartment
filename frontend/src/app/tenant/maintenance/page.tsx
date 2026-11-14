@@ -5,10 +5,13 @@ import { Upload, X, Wrench } from "lucide-react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import ModalAlert from "@/components/ModalAlert";
 
+const priorities = ["high", "medium", "low"] as const;
+type Priority = (typeof priorities)[number];
+
 export default function MaintenancePage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"urgent" | "high" | "medium">("medium");
+  const [priority, setPriority] = useState<Priority>("medium");
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -80,10 +83,10 @@ export default function MaintenancePage() {
     }
   };
 
-  const priorityStyles = {
-    urgent: "bg-red-100 text-red-600 border-red-300",
+  const priorityStyles: Record<Priority, string> = {
     high: "bg-yellow-100 text-yellow-700 border-yellow-300",
     medium: "bg-indigo-100 text-indigo-600 border-indigo-300",
+    low: "bg-gray-100 text-gray-700 border-gray-300",
   };
 
   return (
@@ -138,7 +141,7 @@ export default function MaintenancePage() {
             </label>
 
             <div className="flex gap-3">
-              {(["high", "medium", "low"] as const).map((level) => (
+              {priorities.map((level) => (
                 <button
                   key={level}
                   type="button"

@@ -1,5 +1,5 @@
 import { CloudinaryProvider } from '../config/cloudinary.config';
-import { UsersModule } from 'src/users/users.module';
+import { UsersModule } from '../users/users.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import { UploadController } from './upload.controller';

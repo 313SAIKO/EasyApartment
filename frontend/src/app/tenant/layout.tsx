@@ -2,9 +2,9 @@
 
 import { Bell, Home, FileText, Wrench, User } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
 export default function TenantLayout({
   children,
 }: {
@@ -12,20 +12,19 @@ export default function TenantLayout({
 }) {
   const pathname = usePathname();
 
-  const [user, setUser] = useState<any | null>(null);
+  const router = useRouter();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    async function loadUser() {
-      try {
-        const data = await fetchWithAuth("/auth/profile");
-        setUser(data);
-      } catch (err) {
-        console.error("Failed to load user:", err);
-      }
+    if (!loading && user?.role !== "tenant") {
+      router.replace(user?.role === "admin" ? "/admin" : "/login");
     }
+  }, [loading, router, user?.role]);
 
-    loadUser();
-  }, []);
+  if (loading) {
+    return <p className="p-6 text-sm text-gray-500">กำลังโหลดบัญชี…</p>;
+  }
+  if (user?.role !== "tenant") return null;
 
   return (
     // ครอบด้วย div เพื่อจัดการให้เมนูอยู่ล่างสุดเสมอถ้าเนื้อหาน้อย
@@ -85,7 +84,7 @@ export default function TenantLayout({
               <Link href="/tenant/account">
               <div className="flex cursor-pointer items-center gap-2 border-l border-gray-200 pl-4">
                 <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-bold text-indigo-600">
-                  {user?.profile?.avatar.url ? (
+                  {user.profile?.avatar?.url ? (
                     <img
                       src={user.profile.avatar.url}
                       alt="avatar"

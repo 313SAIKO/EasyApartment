@@ -7,13 +7,13 @@ import {
   Get,
   Req,
 } from '@nestjs/common';
-import { JwtPayload } from 'src/auth/types/jwt-payload.type';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserByAdminDto } from './dto/user.dto';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { UpdateAvatarDto } from './dto/avatar.url.dto';
 interface JwtRequest extends Request {
   user: JwtPayload;

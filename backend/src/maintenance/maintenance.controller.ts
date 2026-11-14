@@ -17,9 +17,9 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { MaintenanceService } from './maintenance.service';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('maintenance')
 export class MaintenanceController {

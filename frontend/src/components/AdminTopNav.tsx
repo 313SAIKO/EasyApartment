@@ -59,7 +59,7 @@ export default function AdminTopNav({ user: propUser }: { user?: any }) {
               className="flex items-center gap-2 px-2 py-1 rounded-full hover:bg-gray-100 transition"
             >
               <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
-                {(user as any)?.profile?.avatar.url ? (
+                {(user as any)?.profile?.avatar?.url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={(user as any).profile.avatar.url}

@@ -4,7 +4,13 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api, { logout as endSession, signIn } from '@/lib/api'
 
-type User = { id?: string | number; name?: string | null; email?: string | null; role?: string } | null
+type User = {
+  id?: string | number
+  name?: string | null
+  email?: string | null
+  role?: string
+  profile?: { fullName?: string | null; avatar?: { url?: string | null } | null } | null
+} | null
 
 type AuthContextType = {
   user: User

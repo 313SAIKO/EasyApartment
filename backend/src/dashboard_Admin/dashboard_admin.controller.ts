@@ -5,9 +5,9 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { DashboardAdminService } from './dashboard_admin.service';
-import { AccessTokenGuard } from 'src/auth/guards/access-token.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
+import { AccessTokenGuard } from '../auth/guards/access-token.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('dashboard-admin')
 export class DashboardAdminController {

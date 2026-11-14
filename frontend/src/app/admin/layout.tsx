@@ -1,20 +1,10 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import AdminTopNav from "@/components/AdminTopNav";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
-
-interface User {
-  id: string;
-  email: string;
-  role: string;
-  profile?: {
-    fullName?: string;
-    avatarUrl?: string;
-  };
-}
+import { useAuth } from "@/context/AuthContext";
 
 export default function AdminLayout({
   children,
@@ -23,31 +13,13 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    async function loadUser() {
-      try {
-        const data = await fetchWithAuth("/auth/profile");
-
-        // ป้องกัน role ไม่ใช่ admin
-        if (data.role !== "admin") {
-          router.push("/login");
-          return;
-        }
-
-        setUser(data);
-      } catch (err) {
-        console.error("Failed to load admin:", err);
-        router.push("/login");
-      } finally {
-        setLoading(false);
-      }
+    if (!loading && user?.role !== "admin") {
+      router.replace(user?.role === "tenant" ? "/tenant/dashboard" : "/login");
     }
-
-    loadUser();
-  }, [router]);
+  }, [loading, router, user?.role]);
 
   if (loading) {
     return (
@@ -56,6 +28,8 @@ export default function AdminLayout({
       </div>
     );
   }
+
+  if (user?.role !== "admin") return null;
 
   return (
     <div className="flex h-screen bg-gray-50">

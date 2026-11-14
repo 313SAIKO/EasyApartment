@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -16,7 +17,7 @@ const nextConfig: NextConfig = {
   // Ensure Turbopack uses this project folder as root to avoid
   // including parent folders with non-ASCII characters in generated ids.
   turbopack: {
-    root: './',
+    root: path.resolve(__dirname),
   },
 };
 
