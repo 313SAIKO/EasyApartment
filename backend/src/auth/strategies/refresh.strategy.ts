@@ -7,7 +7,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 
-import { isObjectIdOrHexString } from 'mongoose';
+import { isUUID } from 'class-validator';
 import type { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
@@ -29,7 +29,7 @@ export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     if (
       !refreshToken ||
       typeof payload.sub !== 'string' ||
-      !isObjectIdOrHexString(payload.sub)
+      !isUUID(payload.sub)
     ) {
       throw new UnauthorizedException();
     }

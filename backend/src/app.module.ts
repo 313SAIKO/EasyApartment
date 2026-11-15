@@ -3,9 +3,9 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { PrismaExceptionFilter } from './database/prisma-exception.filter';
+import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AppService } from './app.service';
@@ -16,7 +16,7 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { ContractsModule } from './contracts/contracts.module';
 
 // 1. เพิ่มบรรทัด Import ตรงนี้ (เช็คชื่อโฟลเดอร์ให้ตรงกับของเพื่อนนะ dashboard_Admin หรือ dashboard_admin)
-import { DashboardAdminModule } from './dashboard_Admin/dashboard_admin.module'; 
+import { DashboardAdminModule } from './dashboard_Admin/dashboard_admin.module';
 
 @Module({
   imports: [
@@ -27,19 +27,12 @@ import { DashboardAdminModule } from './dashboard_Admin/dashboard_admin.module';
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          ttl: 60,
+          ttl: 60_000,
           limit: 10,
         },
       ],
     }),
 
-    MongooseModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGO_URI'),
-      }),
-    }),
     UsersModule,
     AuthModule,
     UploadModule,
@@ -47,11 +40,16 @@ import { DashboardAdminModule } from './dashboard_Admin/dashboard_admin.module';
     MaintenanceModule,
     InvoicesModule,
     ContractsModule,
-    
+
     // 2. เพิ่มชื่อ Module เข้าไปในอาร์เรย์ imports ตรงนี้ ✅
-    DashboardAdminModule, 
+    DashboardAdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    AppService,
+    ThrottlerGuard,
+    { provide: APP_GUARD, useExisting: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: PrismaExceptionFilter },
+  ],
 })
 export class AppModule {}

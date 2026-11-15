@@ -1,7 +1,11 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { v2 as cloudinary } from 'cloudinary';
 import type { UploadApiResponse } from 'cloudinary';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class UploadService {
@@ -19,7 +23,13 @@ export class UploadService {
       throw new BadRequestException('File size must not exceed 5MB');
     }
 
-    const uniqueFileName = uuidv4();
+    const config = cloudinary.config();
+    if (!config.cloud_name || !config.api_key || !config.api_secret) {
+      throw new ServiceUnavailableException(
+        'Image uploads are not configured; contact the administrator',
+      );
+    }
+    const uniqueFileName = randomUUID();
     return new Promise<UploadApiResponse>((resolve, reject) => {
       cloudinary.uploader
         .upload_stream(

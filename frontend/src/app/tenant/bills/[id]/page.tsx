@@ -142,7 +142,7 @@ export default function BillDetailPage() {
               </div>
             </div>
 
-            {(status === "pending" || status === "rejected") && (
+            {(status === "pending" || status === "rejected" || status === "overdue") && (
               <>
                 {/* Payment Information Section */}
                 <div className="bg-white border border-indigo-100 rounded-2xl p-5 mb-6 shadow-sm">
@@ -157,7 +157,7 @@ export default function BillDetailPage() {
                       className="rounded-xl border"
                     />
                     <p className="text-xs text-gray-500 mt-2">
-                      สแกน QR เพื่อโอนเข้าบัญชี EasyApartment
+                    ข้อมูลสาธิตเท่านั้น ไม่ใช่ QR สำหรับโอนเงินจริง
                     </p>
                   </div>
 

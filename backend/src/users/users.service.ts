@@ -1,210 +1,167 @@
-import { Injectable } from '@nestjs/common';
-
-import * as argon2 from 'argon2';
-
 import {
+  Injectable,
   BadRequestException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-
-import { InjectModel } from '@nestjs/mongoose';
-
-import { Model } from 'mongoose';
-
-import { User, UserDocument, UserRole } from './schemas/user.schema';
+import { Prisma, User, UserRole } from '@prisma/client';
+import { randomBytes } from 'node:crypto';
+import * as argon2 from 'argon2';
+import { PrismaService } from '../database/prisma.service';
 import { UploadService } from '../upload/upload.service';
-
 import { CreateUserByAdminDto } from './dto/user.dto';
+
+function publicUser(user: User) {
+  return {
+    _id: user.id,
+    email: user.email,
+    role: user.role,
+    profile: {
+      fullName: user.fullName,
+      phone: user.phone,
+      idCardNumber: user.idCardNumber,
+      birthDate: user.birthDate,
+      avatar: { url: user.avatarUrl, publicId: user.avatarPublicId },
+    },
+  };
+}
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly db: PrismaService,
     private readonly uploadService: UploadService,
   ) {}
 
-  // ค้นหาผู้ใช้โดยใช้อีเมล
-  findByEmail(email: string) {
-    return this.userModel.findOne({ email }).exec();
-  }
-
-  // ใช้ตอน login: ต้องดึง passwordHash และ refreshTokenHash
-  findByEmailWithSecrets(email: string) {
-    return this.userModel
-      .findOne({ email })
-      .select('+passwordHash +refreshTokenHash')
-      .exec();
-  }
-
-  // ใช้ตอน refresh: ต้องดึง refreshTokenHash
-  findByIdWithRefresh(userId: string) {
-    return this.userModel.findById(userId).select('+refreshTokenHash').exec();
-  }
-
-  // สร้างผู้ใช้ใหม่ โดยกำหนด role ได้
-  create(data: { email: string; passwordHash: string; role?: UserRole }) {
-    return this.userModel.create({
-      email: data.email,
-
-      passwordHash: data.passwordHash,
-
-      role: data.role ?? 'tenant', // กำหนดค่าเริ่มต้นเป็น 'tenant' หากไม่ระบุ role
+  async findByEmail(email: string) {
+    const user = await this.db.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
     });
+    return user ? publicUser(user) : null;
   }
 
-  // อัพเดท refreshTokenHash
-  setRefreshTokenHash(userId: string, refreshTokenHash: string | null) {
-    return this.userModel
-      .updateOne({ _id: userId }, { refreshTokenHash })
-      .exec();
+  async findByEmailWithSecrets(email: string) {
+    const user = await this.db.user.findUnique({
+      where: { email: email.trim().toLowerCase() },
+    });
+    return user
+      ? { ...publicUser(user), passwordHash: user.passwordHash }
+      : null;
+  }
+
+  async findByIdWithRefresh(id: string) {
+    const user = await this.db.user.findUnique({ where: { id } });
+    return user
+      ? { ...publicUser(user), refreshTokenHash: user.refreshTokenHash }
+      : null;
+  }
+
+  async create(data: { email: string; passwordHash: string; role?: UserRole }) {
+    return this.insert({ ...data, email: data.email.trim().toLowerCase() });
+  }
+
+  private async insert(data: Prisma.UserCreateInput) {
+    try {
+      return publicUser(await this.db.user.create({ data }));
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Email already exists');
+      }
+      throw error;
+    }
+  }
+
+  setRefreshTokenHash(id: string, refreshTokenHash: string | null) {
+    return this.db.user.updateMany({
+      where: { id },
+      data: { refreshTokenHash },
+    });
   }
 
   async replaceRefreshTokenHash(
-    userId: string,
+    id: string,
     previousHash: string,
     nextHash: string,
-  ): Promise<boolean> {
-    const result = await this.userModel
-      .updateOne(
-        { _id: userId, refreshTokenHash: previousHash },
-        { $set: { refreshTokenHash: nextHash } },
-      )
-      .exec();
-    return result.matchedCount === 1;
-  }
-
-  // อัพเดทบทบาทผู้ใช้
-  setRole(userId: string, role: UserRole) {
-    return this.userModel.updateOne({ _id: userId }, { role }).exec();
-  }
-
-  // ============   สร้างผู้ใช้โดย Admin พร้อม generate password อัตโนมัติ ================== //
-  async createUserByAdmin(dto: CreateUserByAdminDto) {
-    const data = {
-      email: dto.email,
-      role: dto.role,
-      birthDate: dto.profile.birthDate,
-    };
-    // ตรวจสอบว่า email ซ้ำหรือไม่
-    const existing = await this.userModel.findOne({ email: data.email });
-    if (existing) {
-      throw new BadRequestException('Email already exists');
-    }
-
-    // สร้างรหัสผ่านจาก email prefix + birthDate (YYYYMMDD)
-    const emailPrefix = data.email.split('@')[0];
-
-    if (!data.birthDate) {
-      throw new BadRequestException('Birth date is required');
-    }
-    const birth = new Date(data.birthDate);
-    const yyyy = birth.getFullYear();
-    const mm = String(birth.getMonth() + 1).padStart(2, '0');
-    const dd = String(birth.getDate()).padStart(2, '0');
-
-    const rawPassword = `${emailPrefix}${dd}${mm}${yyyy}`;
-
-    // hash password
-    const passwordHash = await argon2.hash(rawPassword);
-
-    const user = await this.userModel.create({
-      email: data.email,
-      passwordHash,
-      role: data.role ?? 'tenant',
-      profile: {
-        fullName: dto.profile.fullName,
-        phone: dto.profile.phone,
-        idCardNumber: dto.profile.idCardNumber,
-        avatar: {
-          url: dto.profile.avatarUrl ?? null,
-          publicId: dto.profile.avatarPublicId ?? null,
-        },
-        birthDate: dto.profile.birthDate
-          ? new Date(dto.profile.birthDate)
-          : null,
-      },
+  ) {
+    const result = await this.db.user.updateMany({
+      where: { id, refreshTokenHash: previousHash },
+      data: { refreshTokenHash: nextHash },
     });
-    return {
-      message: 'User created successfully',
-      temporaryPassword: rawPassword,
-      user,
-    };
+    return result.count === 1;
   }
 
-  //=========================== เปลี่ยนรหัสผ่านโดย tenant ==================================//
+  setRole(id: string, role: UserRole) {
+    return this.db.user.updateMany({
+      where: { id },
+      data: { role, refreshTokenHash: null },
+    });
+  }
+
+  async createUserByAdmin(dto: CreateUserByAdminDto) {
+    const temporaryPassword = randomBytes(18).toString('base64url');
+    const user = await this.insert({
+      email: dto.email.trim().toLowerCase(),
+      role: dto.role,
+      passwordHash: await argon2.hash(temporaryPassword),
+      fullName: dto.profile.fullName,
+      phone: dto.profile.phone,
+      idCardNumber: dto.profile.idCardNumber,
+      birthDate: dto.profile.birthDate ? new Date(dto.profile.birthDate) : null,
+      avatarUrl: dto.profile.avatarUrl,
+      avatarPublicId: dto.profile.avatarPublicId,
+    });
+    return { message: 'User created successfully', temporaryPassword, user };
+  }
+
   async changePassword(
-    userId: string,
+    id: string,
     oldPassword: string,
     newPassword: string,
-    confirmNewpassword: string,
+    confirmation: string,
   ) {
-    const user = await this.userModel.findById(userId).select('+passwordHash');
-
+    const user = await this.db.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException();
-
-    const matches = await argon2.verify(user.passwordHash, oldPassword);
-
-    if (!matches) throw new UnauthorizedException('รหัสเดิมไม่ถูกต้อง');
-
-    if (newPassword !== confirmNewpassword) {
+    if (!(await argon2.verify(user.passwordHash, oldPassword)))
+      throw new UnauthorizedException('Incorrect password');
+    if (
+      typeof newPassword !== 'string' ||
+      newPassword.length < 8 ||
+      newPassword !== confirmation
+    ) {
       throw new BadRequestException(
-        'รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน',
+        'Password must have at least 8 characters and match confirmation',
       );
     }
-    const newHash = await argon2.hash(newPassword);
-
-    user.passwordHash = newHash;
-    await user.save();
-
-    return { message: 'เปลี่ยนรหัสผ่านสำเร็จ' };
+    await this.db.user.update({
+      where: { id },
+      data: {
+        passwordHash: await argon2.hash(newPassword),
+        refreshTokenHash: null,
+      },
+    });
+    return { message: 'Password changed successfully' };
   }
 
-  //====================================== เปลี่ยนรูป avatar ====================================
-  async updateAvatar(
-    userId: string,
-    avatarUrl: string,
-    avatarPublicId: string,
-  ) {
-    const user = await this.userModel.findById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    const oldPublicId = user.profile?.avatar?.publicId ?? null;
-
-    user.profile = {
-      fullName: user.profile?.fullName ?? null,
-      phone: user.profile?.phone ?? null,
-      idCardNumber: user.profile?.idCardNumber ?? null,
-      birthDate: user.profile?.birthDate ?? null,
-      avatar: {
-        url: avatarUrl,
-        publicId: avatarPublicId,
-      },
-    };
-
-    await user.save();
-
-    if (oldPublicId) {
-      // ลบรูปเก่าหลังจากบันทึกสำเร็จ
-      await this.uploadService.deleteImage(oldPublicId);
-      // ต้อง inject UploadService ถ้ายังไม่ได้ทำ
-      // await this.uploadService.deleteImage(oldPublicId);
-    }
-
+  async updateAvatar(id: string, avatarUrl: string, avatarPublicId: string) {
+    const user = await this.db.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException();
+    await this.db.user.update({
+      where: { id },
+      data: { avatarUrl, avatarPublicId },
+    });
+    if (user.avatarPublicId && user.avatarPublicId !== avatarPublicId)
+      await this.uploadService.deleteImage(user.avatarPublicId);
     return {
-      message: 'อัปเดตรูปโปรไฟล์สำเร็จ',
-      avatar: {
-        url: avatarUrl,
-        publicId: avatarPublicId,
-      },
+      message: 'Avatar updated',
+      avatar: { url: avatarUrl, publicId: avatarPublicId },
     };
   }
 
-  /* ========== ส่งprofile ให้auth =============== */
   async findById(id: string) {
-    return this.userModel.findById(id).select('-passwordHash').exec();
+    const user = await this.db.user.findUnique({ where: { id } });
+    return user ? publicUser(user) : null;
   }
 }

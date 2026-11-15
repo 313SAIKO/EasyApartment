@@ -3,193 +3,136 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { Maintenance } from './entities/maintenance.entity';
-import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
+import { MaintenanceStatus, Prisma } from '@prisma/client';
+import { isUUID } from 'class-validator';
+import { PrismaService } from '../database/prisma.service';
+import { tenantResponse, roomResponse } from '../database/responses';
 import { UploadService } from '../upload/upload.service';
-import { RoomsService } from '../rooms/rooms.service';
-import { RoomStatus } from '../rooms/schema/room.schema';
+import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
+
+const include = { room: true, reportedBy: true } as const;
+type Record = Prisma.MaintenanceGetPayload<{ include: typeof include }>;
+function response(record: Record) {
+  return {
+    _id: record.id,
+    roomId: roomResponse(record.room),
+    reportedBy: tenantResponse(record.reportedBy),
+    title: record.title,
+    description: record.description,
+    status: record.status,
+    priority: record.priority,
+    images: record.images,
+    repairLogs: record.repairLogs,
+    completedAt: record.completedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
 
 @Injectable()
 export class MaintenanceService {
   constructor(
-    @InjectModel(Maintenance.name)
-    private maintenanceModel: Model<any>,
-    private cloudinaryService: UploadService,
-    private readonly roomsService: RoomsService,
+    private readonly db: PrismaService,
+    private readonly uploads: UploadService,
   ) {}
 
-  // =========================
-  // CREATE
-  // =========================
   async create(
     dto: CreateMaintenanceDto,
     userId: string,
     files?: Express.Multer.File[],
   ) {
-    const room = await this.roomsService.findByTenant(userId);
-
-    if (!room) {
-      throw new BadRequestException('User has no assigned room');
-    }
-
-    let uploadedImages: { url: string; publicId: string }[] = [];
-
-    if (files && files.length > 0) {
-      const uploadResults = await Promise.all(
-        files.map((file) =>
-          this.cloudinaryService.uploadImage(file, 'maintenance'),
-        ),
-      );
-
-      uploadedImages = uploadResults.map((result: any) => ({
-        url: result.secure_url,
-        publicId: result.public_id,
-      }));
-    }
-
-    const newMaintenance = new this.maintenanceModel({
-      roomId: room._id,
-      reportedBy: userId,
-      title: dto.title,
-      description: dto.description,
-      images: uploadedImages,
-      status: 'pending',
-      priority: dto.priority || 'medium',
-      repairLogs: [
-        {
-          status: 'pending',
-          note: 'แจ้งซ่อมเข้าระบบ',
-          updatedAt: new Date(),
-        },
-      ],
+    const contract = await this.db.contract.findFirst({
+      where: { tenantId: userId, status: 'active' },
     });
-
-    const savedMaintenance = await newMaintenance.save();
-
-    await this.roomsService.updateStatus(
-      room._id.toString(),
-      RoomStatus.MAINTENANCE,
-    );
-
-    return savedMaintenance;
-  }
-
-  // =========================
-  // FIND ALL (Admin)
-  // =========================
-  async findAll() {
-    return this.maintenanceModel
-      .find()
-      .populate('reportedBy', 'email profile')
-      .populate('roomId', 'roomNumber floor')
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  // =========================
-  // UPDATE STATUS
-  // =========================
-  async updateStatus(id: string, status: string) {
-    if (!['pending', 'in_progress', 'completed'].includes(status)) {
-      throw new BadRequestException('Invalid status value');
-    }
-
-    const maintenance = await this.maintenanceModel.findById(id);
-
-    if (!maintenance) {
-      throw new NotFoundException('Maintenance not found');
-    }
-
-    maintenance.status = status;
-
-    if (status === 'completed') {
-      maintenance.completedAt = new Date();
-    }
-
-    maintenance.repairLogs.push({
-      status,
-      note: `เปลี่ยนสถานะเป็น ${status}`,
-      updatedAt: new Date(),
-    });
-
-    const updatedMaintenance = await maintenance.save();
-
-    if (status === 'completed') {
-      await this.roomsService.updateStatus(
-        maintenance.roomId.toString(),
-        RoomStatus.OCCUPIED,
-      );
-    }
-
-    return updatedMaintenance;
-  }
-
-  // =========================
-  // ADD REPAIR LOG
-  // =========================
-  async addRepairLog(id: string, note: string, status?: string) {
-    const maintenance = await this.maintenanceModel.findById(id);
-
-    if (!maintenance) {
-      throw new NotFoundException('Maintenance not found');
-    }
-
-    maintenance.repairLogs.push({
-      status: status || maintenance.status,
-      note,
-      updatedAt: new Date(),
-    });
-
-    if (status) {
-      maintenance.status = status;
-
-      if (status === 'completed') {
-        maintenance.completedAt = new Date();
+    if (!contract) throw new BadRequestException('No active room for tenant');
+    const images: { url: string; publicId: string }[] = [];
+    try {
+      for (const file of files ?? []) {
+        const result = await this.uploads.uploadImage(file, 'maintenance');
+        images.push({ url: result.secure_url, publicId: result.public_id });
       }
-    }
-
-    const updatedMaintenance = await maintenance.save();
-
-    // ✅ อัปเดตสถานะห้องถ้าเปลี่ยนเป็น completed (ซ่อมเสร็จ) แล้ว Status จะกลายเป็น occupied
-    if (status === 'completed') {
-      await this.roomsService.updateStatus(
-        maintenance.roomId.toString(),
-        RoomStatus.OCCUPIED,
+      const record = await this.db.maintenance.create({
+        data: {
+          roomId: contract.roomId,
+          reportedById: userId,
+          title: dto.title,
+          description: dto.description,
+          priority: dto.priority ?? 'medium',
+          images,
+          repairLogs: [
+            {
+              status: 'pending',
+              note: 'Request submitted',
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        },
+        include,
+      });
+      return response(record);
+    } catch (error) {
+      await Promise.allSettled(
+        images.map((image) => this.uploads.deleteImage(image.publicId)),
       );
+      throw error;
     }
-
-    return updatedMaintenance;
   }
 
-  // =========================
-  // DELETE (Admin Only)
-  // =========================
-  async delete(id: string) {
-    const maintenance = await this.maintenanceModel.findById(id);
+  async findAll() {
+    return (
+      await this.db.maintenance.findMany({
+        include,
+        orderBy: { createdAt: 'desc' },
+      })
+    ).map(response);
+  }
 
-    if (!maintenance) {
-      throw new NotFoundException('Maintenance not found');
-    }
+  async updateStatus(id: string, status: string) {
+    return this.addRepairLog(id, `Status changed to ${status}`, status);
+  }
 
-    // ✅ ลบรูปใน Cloudinary
-    if (maintenance.images && maintenance.images.length > 0) {
-      await Promise.all(
-        maintenance.images.map((img: any) =>
-          this.cloudinaryService.deleteImage(img.publicId),
-        ),
-      );
-    }
-
-    // ✅ อัปเดตสถานะห้องกลับ AVAILABLE
-    await this.roomsService.updateStatus(
-      maintenance.roomId.toString(),
-      RoomStatus.AVAILABLE,
+  async addRepairLog(id: string, note: string, status?: string) {
+    if (!isUUID(id)) throw new NotFoundException('Maintenance not found');
+    if (typeof note !== 'string' || !note.trim())
+      throw new BadRequestException('Note is required');
+    if (
+      status &&
+      !Object.values(MaintenanceStatus).includes(status as MaintenanceStatus)
+    )
+      throw new BadRequestException('Invalid status');
+    const updated = await this.db.$transaction(
+      async (tx) => {
+        const record = await tx.maintenance.findUnique({ where: { id } });
+        if (!record) throw new NotFoundException('Maintenance not found');
+        const nextStatus = (status ?? record.status) as MaintenanceStatus;
+        const logs = Array.isArray(record.repairLogs) ? record.repairLogs : [];
+        return tx.maintenance.update({
+          where: { id },
+          data: {
+            status: nextStatus,
+            completedAt: nextStatus === 'completed' ? new Date() : null,
+            repairLogs: [
+              ...logs,
+              { status: nextStatus, note, updatedAt: new Date().toISOString() },
+            ] as Prisma.InputJsonValue,
+          },
+          include,
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    return response(updated);
+  }
 
-    await this.maintenanceModel.findByIdAndDelete(id);
-
+  async delete(id: string) {
+    if (!isUUID(id)) throw new NotFoundException('Maintenance not found');
+    const record = await this.db.maintenance.findUnique({ where: { id } });
+    if (!record) throw new NotFoundException('Maintenance not found');
+    await this.db.maintenance.delete({ where: { id } });
+    const images = record.images as { url: string; publicId: string }[];
+    await Promise.allSettled(
+      images.map((image) => this.uploads.deleteImage(image.publicId)),
+    );
     return { message: 'Maintenance deleted successfully' };
   }
 }

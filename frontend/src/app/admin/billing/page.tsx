@@ -62,7 +62,7 @@ export default function BillingPage() {
   const electricUsed = electricUsedRaw > 0 ? electricUsedRaw : 0;
 
   const grandTotal =
-    Number(rent) + Number(serviceFee) + waterUsed * 10 + electricUsed * 7;
+    Number(rent) + Number(serviceFee) + waterUsed * 10 + electricUsed * 8;
 
   // ✅ แก้ไขส่วนนี้: ส่งเฉพาะฟิลด์ที่ Backend อนุญาต (ตัดฟิลด์ที่เกินออก)
   const handleCreateInvoice = async () => {
@@ -86,6 +86,9 @@ export default function BillingPage() {
       };
 
       const res = await api.post("/invoices", payload);
+
+      setContracts((items) => items.map((contract) => contract._id === contractId
+        ? { ...contract, roomId: res.data.roomId } : contract));
 
       console.log("Invoice created:", res.data);
       setModalType("success");
@@ -265,7 +268,7 @@ export default function BillingPage() {
                 </span>
               </div>
               <span className="text-xs bg-yellow-500 text-white px-2.5 py-0.5 rounded-full font-mono">
-                ฿7 / หน่วย
+                ฿8 / หน่วย
               </span>
             </div>
 
@@ -397,7 +400,6 @@ export default function BillingPage() {
         duration={5000}
         onClose={() => setModalOpen(false)}
       />
-      ˝
     </div>
   );
 }

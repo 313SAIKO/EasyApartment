@@ -1,11 +1,12 @@
 import {
   IsString,
   IsNumber,
+  IsInt,
   IsEnum,
   IsOptional,
   IsArray,
   ValidateNested,
-  IsMongoId,
+  IsUUID,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -52,7 +53,7 @@ export class CreateRoomDto {
   @IsString()
   roomNumber: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
   floor: number;
 
@@ -60,14 +61,15 @@ export class CreateRoomDto {
   roomType: RoomType;
 
   @IsNumber()
+  @Min(0)
   prices: number;
   @IsOptional()
   @IsEnum(RoomStatus)
   status: RoomStatus;
 
   @IsOptional()
-  @IsMongoId()
-  currentTenant?: string; // ObjectId (string form)
+  @IsUUID()
+  currentTenant?: string;
 
   @IsArray()
   @IsString({ each: true })

@@ -1,18 +1,9 @@
-// backend/src/rooms/rooms.module.ts
 import { Module } from '@nestjs/common';
-import { RoomsService } from './rooms.service';
+import { DatabaseModule } from '../database/database.module';
 import { RoomsController } from './rooms.controller';
-import { MongooseModule } from '@nestjs/mongoose';
-import { Room, RoomSchema } from './schema/room.schema';
-import { Contract, ContractSchema } from '../contracts/schemas/contract.schema';
-
+import { RoomsService } from './rooms.service';
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: Room.name, schema: RoomSchema },
-      { name: Contract.name, schema: ContractSchema },
-    ]),
-  ],
+  imports: [DatabaseModule],
   controllers: [RoomsController],
   providers: [RoomsService],
   exports: [RoomsService],

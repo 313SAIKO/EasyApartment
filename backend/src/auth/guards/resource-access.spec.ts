@@ -1,8 +1,8 @@
+import { PrismaService } from '../../database/prisma.service';
 import { afterAll, beforeAll, describe, expect, it, jest } from '@jest/globals';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { getModelToken } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -21,44 +21,58 @@ import { AuthService } from '../auth.service';
 import { JwtStrategy } from '../strategies/jwt.strategy';
 import { RefreshStrategy } from '../strategies/refresh.strategy';
 
-jest.mock('uuid', () => ({ v4: jest.fn() }));
-
 type TokenPair = { access_token: string; refresh_token: string };
 
 describe('Apartment resource access', () => {
   const secret = 'resource-access-test-only';
   const refreshSecret = 'refresh-test-only';
-  const tenantA = '000000000000000000000001';
-  const tenantB = '000000000000000000000002';
-  const admin = '000000000000000000000003';
-  const recordA = { _id: '000000000000000000000011', tenantId: tenantA };
-  const recordB = { _id: '000000000000000000000012', tenantId: tenantB };
+  const tenantA = '00000000-0000-4000-8000-000000000001';
+  const tenantB = '00000000-0000-4000-8000-000000000002';
+  const admin = '00000000-0000-4000-8000-000000000003';
+  const recordA = {
+    _id: '00000000-0000-4000-8000-000000000011',
+    tenantId: tenantA,
+  };
+  const recordB = {
+    _id: '00000000-0000-4000-8000-000000000012',
+    tenantId: tenantB,
+  };
   const records = [recordA, recordB];
 
-  type Filter = { _id: string; tenantId?: string };
-  const lookup = (filter: Filter) =>
-    records.find(
+  type Filter = { id: string; tenantId?: string };
+  const room = { id: '00000000-0000-4000-8000-000000000099', amenities: [] };
+  const lookup = (filter: Filter) => {
+    const record = records.find(
       (record) =>
-        record._id === filter._id &&
+        record._id === filter.id &&
         (filter.tenantId === undefined || record.tenantId === filter.tenantId),
-    ) ?? null;
-
-  const findOne = jest.fn((filter: Filter) => {
-    const query = {
-      populate: () => query,
-      exec: async () => lookup(filter),
-    };
-    return query;
-  });
-  const updateInvoice = jest.fn((filter: Filter) => ({
-    exec: async () => lookup(filter),
+    );
+    return record
+      ? {
+          ...record,
+          id: record._id,
+          status: 'pending',
+          room,
+          tenant: { id: record.tenantId },
+          contractId: record._id,
+          updatedAt: new Date('2026-01-01'),
+        }
+      : null;
+  };
+  const findFirst = jest.fn(async ({ where }: { where: Filter }) =>
+    lookup(where),
+  );
+  const updateInvoice = jest.fn(async ({ where }: { where: Filter }) => ({
+    count: lookup(where) ? 1 : 0,
   }));
   const uploadImage = jest.fn(async () => ({
     secure_url: 'https://example.invalid/slip.png',
     public_id: 'test-slip',
   }));
   const deleteImage = jest.fn(async () => undefined);
-  const rooms = [{ _id: '000000000000000000000021', roomNumber: '101' }];
+  const rooms = [
+    { _id: '00000000-0000-4000-8000-000000000021', roomNumber: '101' },
+  ];
   const jwt = new JwtService({ secret });
   const token = (sub: string, role = 'tenant') => jwt.sign({ sub, role });
   const credentials = {
@@ -105,49 +119,36 @@ describe('Apartment resource access', () => {
         ContractsService,
         UsersService,
         {
-          provide: getModelToken('User'),
+          provide: PrismaService,
           useValue: {
-            findOne: () => ({
-              select: () => ({ exec: async () => ({ ...user }) }),
-            }),
-            findById: () => ({
-              select: () => ({ exec: async () => ({ ...user }) }),
-            }),
-            updateOne: (
-              filter: { _id: string; refreshTokenHash?: string },
-              update: {
-                refreshTokenHash?: string | null;
-                $set?: { refreshTokenHash: string };
-              },
-            ) => ({
-              exec: async () => {
+            invoice: {
+              findFirst,
+              findMany: async () =>
+                records.map((record) => lookup({ id: record._id })),
+              updateMany: updateInvoice,
+            },
+            contract: { findFirst },
+            user: {
+              findUnique: async () => ({ ...user, id: user._id }),
+              updateMany: async ({
+                where,
+                data,
+              }: {
+                where: { id: string; refreshTokenHash?: string };
+                data: { refreshTokenHash: string | null };
+              }) => {
                 if (
-                  filter._id !== user._id ||
-                  (filter.refreshTokenHash !== undefined &&
-                    filter.refreshTokenHash !== user.refreshTokenHash)
-                ) {
-                  return { matchedCount: 0 };
-                }
-                user.refreshTokenHash =
-                  update.$set?.refreshTokenHash ??
-                  update.refreshTokenHash ??
-                  null;
-                return { matchedCount: 1 };
+                  where.id !== user._id ||
+                  (where.refreshTokenHash !== undefined &&
+                    where.refreshTokenHash !== user.refreshTokenHash)
+                )
+                  return { count: 0 };
+                user.refreshTokenHash = data.refreshTokenHash;
+                return { count: 1 };
               },
-            }),
+            },
           },
         },
-        {
-          provide: getModelToken('Invoice'),
-          useValue: {
-            findOne,
-            find: () => ({ populate: () => ({ exec: async () => records }) }),
-            exists: async (filter: Filter) => lookup(filter),
-            findOneAndUpdate: updateInvoice,
-          },
-        },
-        { provide: getModelToken('Contract'), useValue: { findOne } },
-        { provide: getModelToken('Room'), useValue: {} },
         {
           provide: RoomsService,
           useValue: { findAll: () => rooms, findOne: () => rooms[0] },
@@ -200,7 +201,8 @@ describe('Apartment resource access', () => {
     await http
       .get(invoicePath)
       .auth(renewed.access_token, { type: 'bearer' })
-      .expect(200, recordA);
+      .expect(200)
+      .expect(({ body }) => expect(body._id).toBe(recordA._id));
     await refresh(initial.refresh_token).expect(403);
     await http
       .post('/api/v1/auth/logout')
@@ -219,12 +221,14 @@ describe('Apartment resource access', () => {
       await http
         .get(path)
         .auth(token(tenantA), { type: 'bearer' })
-        .expect(200, recordA);
+        .expect(200)
+        .expect(({ body }) => expect(body._id).toBe(recordA._id));
       await http.get(path).auth(token(tenantB), { type: 'bearer' }).expect(404);
       await http
         .get(path)
         .auth(token(admin, 'admin'), { type: 'bearer' })
-        .expect(200, recordA);
+        .expect(200)
+        .expect(({ body }) => expect(body._id).toBe(recordA._id));
     },
   );
 
@@ -238,7 +242,12 @@ describe('Apartment resource access', () => {
     await http
       .get('/api/v1/invoices')
       .auth(token(admin, 'admin'), { type: 'bearer' })
-      .expect(200, records);
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.map((item: { _id: string }) => item._id)).toEqual(
+          records.map((item) => item._id),
+        ),
+      );
   });
 
   it('checks invoice ownership before uploading and in the update filter', async () => {
@@ -253,12 +262,17 @@ describe('Apartment resource access', () => {
     expect(uploadImage).not.toHaveBeenCalled();
     expect(updateInvoice).not.toHaveBeenCalled();
 
-    await submitSlip(tenantA).expect(200, recordA);
+    await submitSlip(tenantA)
+      .expect(200)
+      .expect(({ body }) => expect(body._id).toBe(recordA._id));
     expect(uploadImage).toHaveBeenCalledTimes(1);
-    expect(updateInvoice.mock.calls[0][0]).toEqual({
-      _id: recordA._id,
-      tenantId: tenantA,
-    });
+    expect(updateInvoice.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({
+        id: recordA._id,
+        tenantId: tenantA,
+        status: 'pending',
+      }),
+    );
   });
 
   it.each(['/api/v1/rooms', `/api/v1/rooms/${rooms[0]._id}`])(

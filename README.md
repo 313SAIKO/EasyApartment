@@ -1,238 +1,67 @@
+# EasyApartment
 
+Apartment management application built with NestJS, Next.js 16, PostgreSQL and Prisma. Features include admin/tenant authentication, rooms, rental contracts, monthly invoices, payment review, maintenance and an admin dashboard.
 
-# 🏢 EasyProperty
+## Local setup
 
-Property Management System (PMS)  
-Built with **NestJS (Backend)** + **Next.js (Frontend)** + **MongoDB**
+Requirements: Node.js 22.12+ (tested with Node 24), npm and PostgreSQL (tested with PostgreSQL 18).
 
----
+1. Create an empty PostgreSQL database named `easyapartment_dev` using your PostgreSQL administrator account.
+2. In `backend`, run `npm ci` and copy `.env.example` to `.env`. Set `DATABASE_URL`, two different random JWT secrets and a `SEED_PASSWORD` of at least 12 characters. Cloudinary credentials are needed for actual image uploads.
+3. Run these commands in `backend`:
 
-# 📦 Project Structure
-
-```
-EasyProperty/
- ├── backend/   # NestJS API
- ├── frontend/  # Next.js App (App Router)
- ├── .gitignore
- └── README.md
-```
-
----
-
-# 🚀 Tech Stack
-
-- Backend: NestJS + Mongoose
-- Frontend: Next.js 16 (App Router) + TypeScript + Tailwind
-- Database: MongoDB (Atlas recommended)
-- Auth: JWT
-
----
-
-# 🖥️ Requirements
-
-Please install the following before starting:
-
-- Node.js **22 LTS or newer** (the backend imports the ESM-only `uuid@13`)
-- npm (comes with Node)
-- MongoDB Atlas account (or local MongoDB)
-
-Check your version:
-
-```
-node -v
-npm -v
-```
-
----
-
-# 📥 1️⃣ Clone Repository
-
-```
-git clone <YOUR_REPO_URL>
-cd EasyProperty
-```
-
----
-
-# ⚙️ 2️⃣ Backend Setup (NestJS)
-
-Go to backend folder:
-
-```
-cd backend
-```
-
-Install dependencies:
-
-```
-npm install
-```
-
-Copy the example env file and fill in the values (see [Environment Variables Summary](#-environment-variables-summary)):
-
-```
-cp .env.example .env
-```
-
-Run backend:
-
-```
+```sh
+npm run db:generate
+npm run db:migrate
+npm run db:seed
 npm run start:dev
 ```
 
-Backend will run on:
+4. In a second terminal, enter `frontend`, run `npm ci`, copy `.env.example` to `.env`, then run `npm run dev`.
+5. Open http://localhost:3001. The API is http://localhost:3000/api/v1.
 
-```
-http://localhost:3000
-```
+The frontend uses `NEXT_PUBLIC_API_URL`, including `/api/v1`. Local CORS allows `http://localhost:3001`. Keep all actual environment files untracked. Never put database or JWT secrets in frontend environment variables.
 
----
+## Demo data
 
-# 🌐 3️⃣ Frontend Setup (Next.js)
+The seed only runs against `easyapartment_dev`. It creates:
 
-Open new terminal:
+- `admin@example.test`: administrator.
+- `tenant1@example.test`: tenant of room DEMO-101, with a contract, November 2026 invoice and maintenance request.
+- `tenant2@example.test`: tenant without a contract, useful for testing access restrictions.
+- DEMO-102: available room.
 
-```
-cd frontend
-```
+All three accounts initially use `SEED_PASSWORD` from `backend/.env`. Re-running the seed preserves existing records and passwords. Demo data is not intended for production.
 
-Install dependencies:
+## Verification
 
-```
-npm install
-```
+In `backend`:
 
-Copy the example env file (the default value points at the local backend):
-
-```
-cp .env.example .env
-```
-
-Run frontend:
-
-```
-npm run dev
+```sh
+npm run db:generate
+npm run db:migrate
+npm test -- --runInBand
+npm run test:integration
 ```
 
-Frontend will run on:
+The integration verifier starts the real application against `easyapartment_dev`, creates unique fixtures and removes only those fixtures. It checks registration, login, refresh rotation and concurrent replay rejection, logout, role/tenant isolation, rooms, contracts, invoices, duplicate rollback, meter restoration, maintenance and dashboard APIs. Cloudinary uploads and the rate limiter are replaced in this integration test; it does not prove external image storage works. Unit/API guard tests use database mocks.
 
-```
-http://localhost:3001
-```
+In `frontend`:
 
-The dev script pins the frontend to port 3001 so it doesn't clash with the backend on 3000. The backend's CORS setting only allows `http://localhost:3001`.
-
----
-
-# 🔐 Environment Variables Summary
-
-## backend/.env
-
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | no | API port, default `3000` |
-| `MONGO_URI` | yes | MongoDB connection string |
-| `JWT_ACCESS_SECRET` | yes | Secret for access tokens |
-| `JWT_REFRESH_SECRET` | yes | Secret for refresh tokens (must differ from the access secret) |
-| `JWT_ACCESS_EXPIRATION` | no | Access token lifetime in seconds, default `900` |
-| `JWT_REFRESH_EXPIRATION` | no | Refresh token lifetime in seconds, default `604800` |
-| `CLOUDINARY_CLOUD_NAME` | for uploads | Cloudinary cloud name |
-| `CLOUDINARY_API_KEY` | for uploads | Cloudinary API key |
-| `CLOUDINARY_API_SECRET` | for uploads | Cloudinary API secret |
-
-Generate a random secret with:
-
-```
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```sh
+npm run build -- --webpack
 ```
 
-## frontend/.env
+For production-style local startup, build the backend with `npm run build` then use `npm run start:prod`; start the built frontend with `npm start`.
 
-| Variable | Required | Description |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | yes | Backend base URL **including** `/api/v1`, e.g. `http://localhost:3000/api/v1` |
+## Database behavior
 
-⚠️ Never commit `.env` files to Git.
+Prisma schema and committed SQL migrations live in `backend/prisma`. This version starts with fresh PostgreSQL data; it does not import old MongoDB records. API responses retain `_id` and nested room/tenant fields for frontend compatibility, but identifiers are UUIDs.
 
----
+Contracts enforce one active contract per room. Deleting a contract cancels it and retains history. A contract with invoices cannot be reassigned to another room or tenant. Invoice totals use decimal arithmetic, water at 10 and electricity at 8 per unit. Only the latest unpaid invoice without payment evidence can be deleted; its meter readings are restored transactionally. Reviewed or submitted payments remain in history.
 
-# 🌿 Git Workflow (Team)
+If PostgreSQL cannot connect, check the service, database existence and `DATABASE_URL`. Apply migrations before starting the API. For CORS errors, verify the frontend origin and backend API URL rather than disabling access controls.
 
-We use:
+## Project origins and credits
 
-- main → production
-- develop → integration branch
-- feature/<feature-name> → individual work
-
-Example:
-
-```
-git checkout -b feature/auth
-git add .
-git commit -m "feat: add login system"
-git push origin feature/auth
-```
-
-Then create Pull Request to `develop`.
-
----
-
-# 🧪 Running Both Together
-
-Option 1: Open 2 terminals  
-Option 2: Use VSCode split terminal
-
-Terminal 1:
-```
-cd backend
-npm run start:dev
-```
-
-Terminal 2:
-```
-cd frontend
-npm run dev
-```
-
----
-
-# 🛠️ Common Issues
-
-### 1. MongoDB Connection Error
-- Check your MONGO_URI
-- Make sure Atlas IP whitelist includes your IP
-
-### 2. CORS Error
-Make sure backend has:
-
-```
-app.enableCors();
-```
-
-### 3. Port Already In Use
-Change backend PORT in `.env`
-
----
-
-# 📌 Development Rules
-
-- Do NOT push `.env`
-- Do NOT push `node_modules`
-- Always create feature branch
-- Pull latest develop before starting new feature
-
----
-
-# 🚀 Deployment (Future)
-
-- Frontend → Vercel
-- Backend → Render / Railway
-- Database → MongoDB Atlas
-
----
-
-# Project Origins and Credits
-
-EasyApartment began as a student team project. This version is independently maintained by a member of the original team with the team's agreement.
-
-Credit for the original work goes to the EasyProperty Team. See the [original EasyApartment repository](https://github.com/kam345678/EasyApartment) for its contribution history.
+EasyApartment began as a student team project. This version is independently maintained by a member of the original team with the team's agreement. Credit for the original work goes to the EasyProperty Team; see the [original repository](https://github.com/kam345678/EasyApartment) for its contribution history.

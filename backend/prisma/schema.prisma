@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  tenant
+  staff
+}
+
+model User {
+  id               String        @id @default(uuid()) @db.Uuid
+  email            String        @unique
+  passwordHash     String
+  refreshTokenHash String?
+  role             UserRole      @default(tenant)
+  fullName         String?
+  phone            String?
+  idCardNumber     String?
+  birthDate        DateTime?     @db.Date
+  avatarUrl        String?
+  avatarPublicId   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  contracts        Contract[]
+  invoices         Invoice[]     @relation("TenantInvoices")
+  confirmations    Invoice[]     @relation("ConfirmedInvoices")
+  maintenance      Maintenance[]
+}
+
+enum RoomStatus {
+  available
+  occupied
+  cleaning
+  maintenance
+}
+
+enum ContractStatus {
+  active
+  completed
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid_pending_review
+  paid
+  rejected
+  overdue
+}
+
+enum MaintenanceStatus {
+  pending
+  in_progress
+  completed
+}
+
+model Room {
+  id             String        @id @default(uuid()) @db.Uuid
+  roomNumber     String        @unique
+  floor          Int
+  roomType       String
+  prices         Decimal       @db.Decimal(12, 2)
+  status         RoomStatus    @default(available)
+  amenities      String[]
+  waterMeter     Decimal       @default(0) @db.Decimal(12, 3)
+  electricMeter  Decimal       @default(0) @db.Decimal(12, 3)
+  meterUpdatedAt DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  contracts      Contract[]
+  invoices       Invoice[]
+  maintenance    Maintenance[]
+}
+
+model Contract {
+  id             String         @id @default(uuid()) @db.Uuid
+  roomId         String         @db.Uuid
+  room           Room           @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  tenantId       String         @db.Uuid
+  tenant         User           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  type           String
+  startDate      DateTime       @db.Date
+  endDate        DateTime       @db.Date
+  status         ContractStatus @default(active)
+  deposit        Decimal        @db.Decimal(12, 2)
+  advancePayment Decimal        @db.Decimal(12, 2)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  invoices       Invoice[]
+
+  @@index([tenantId, status])
+}
+
+model Invoice {
+  id                String        @id @default(uuid()) @db.Uuid
+  contractId        String        @db.Uuid
+  contract          Contract      @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  roomId            String        @db.Uuid
+  room              Room          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  tenantId          String        @db.Uuid
+  tenant            User          @relation("TenantInvoices", fields: [tenantId], references: [id], onDelete: Restrict)
+  billingPeriod     String
+  waterPrevious     Decimal       @db.Decimal(12, 3)
+  waterCurrent      Decimal       @db.Decimal(12, 3)
+  waterUnitPrice    Decimal       @db.Decimal(12, 2)
+  electricPrevious  Decimal       @db.Decimal(12, 3)
+  electricCurrent   Decimal       @db.Decimal(12, 3)
+  electricUnitPrice Decimal       @db.Decimal(12, 2)
+  rent              Decimal       @db.Decimal(12, 2)
+  serviceFee        Decimal       @db.Decimal(12, 2)
+  waterTotal        Decimal       @db.Decimal(12, 2)
+  electricTotal     Decimal       @db.Decimal(12, 2)
+  grandTotal        Decimal       @db.Decimal(12, 2)
+  status            PaymentStatus @default(pending)
+  slipUrl           String?
+  slipId            String?
+  paidAt            DateTime?
+  confirmedById     String?       @db.Uuid
+  confirmedBy       User?         @relation("ConfirmedInvoices", fields: [confirmedById], references: [id], onDelete: Restrict)
+  confirmedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([contractId, billingPeriod])
+  @@index([tenantId, createdAt])
+}
+
+model Maintenance {
+  id           String            @id @default(uuid()) @db.Uuid
+  roomId       String            @db.Uuid
+  room         Room              @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  reportedById String            @db.Uuid
+  reportedBy   User              @relation(fields: [reportedById], references: [id], onDelete: Restrict)
+  title        String
+  description  String
+  priority     String            @default("medium")
+  status       MaintenanceStatus @default(pending)
+  images       Json              @default("[]")
+  repairLogs   Json              @default("[]")
+  completedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([roomId, status])
+}

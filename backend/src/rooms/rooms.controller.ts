@@ -7,12 +7,13 @@ import {
   Query,
   Patch,
   ParseEnumPipe,
+  ParseArrayPipe,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
-import { RoomStatus } from './schema/room.schema';
+import { RoomStatus } from './dto/create-room.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -30,7 +31,16 @@ export class RoomsController {
 
   // ✅ สร้างหลายห้องพร้อมกัน (Bulk Create)
   @Post('bulk')
-  async createMany(@Body() createRoomDtos: CreateRoomDto[]) {
+  async createMany(
+    @Body(
+      new ParseArrayPipe({
+        items: CreateRoomDto,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    createRoomDtos: CreateRoomDto[],
+  ) {
     if (!Array.isArray(createRoomDtos) || createRoomDtos.length === 0) {
       throw new BadRequestException('Body must be a non-empty array of rooms');
     }
@@ -66,9 +76,11 @@ export class RoomsController {
     @Param('id') id: string,
     @Body() body: { amenities: string[] },
   ) {
-    console.log(`[Backend Log] ID: ${id}, Data:`, body);
-
-    if (!body || !Array.isArray(body.amenities)) {
+    if (
+      !body ||
+      !Array.isArray(body.amenities) ||
+      body.amenities.some((value) => typeof value !== 'string')
+    ) {
       throw new BadRequestException('amenities must be an array of strings');
     }
 

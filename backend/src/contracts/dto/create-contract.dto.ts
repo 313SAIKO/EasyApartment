@@ -1,27 +1,32 @@
 // src/contracts/dto/create-contract.dto.ts
 
 import {
-  IsMongoId,
+  IsUUID,
   IsEnum,
   IsDateString,
   IsNumber,
   ValidateNested,
+  IsDefined,
+  IsOptional,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FinancialsDto {
   @IsNumber()
+  @Min(0)
   deposit: number;
 
   @IsNumber()
+  @Min(0)
   advancePayment: number;
 }
 
 export class CreateContractDto {
-  @IsMongoId()
+  @IsUUID()
   roomId: string;
 
-  @IsMongoId()
+  @IsUUID()
   tenantId: string;
 
   @IsEnum(['daily', 'monthly'])
@@ -36,10 +41,12 @@ export class CreateContractDto {
   @IsEnum(['active', 'completed', 'cancelled'])
   status: string;
 
+  @IsDefined()
   @ValidateNested()
   @Type(() => FinancialsDto)
   financials: FinancialsDto;
 
+  @IsOptional()
   @IsDateString()
   createdAt: string;
 }

@@ -4,7 +4,7 @@ import {
   IsEnum,
   IsOptional,
   IsDateString,
-  IsMongoId,
+  IsUUID,
   IsNumber,
   ValidateNested,
 } from 'class-validator';
@@ -22,11 +22,11 @@ class FinancialsDto {
 
 export class UpdateContractDto {
   @IsOptional()
-  @IsMongoId()
+  @IsUUID()
   roomId?: string;
 
   @IsOptional()
-  @IsMongoId()
+  @IsUUID()
   tenantId?: string;
 
   @IsOptional()

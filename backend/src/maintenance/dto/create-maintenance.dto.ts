@@ -1,9 +1,4 @@
-import {
-  IsNotEmpty,
-  IsString,
-  IsOptional,
-  IsIn,
-} from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsIn } from 'class-validator';
 
 export class CreateMaintenanceDto {
   @IsNotEmpty({ message: 'กรุณากรอกหัวข้อปัญหา' })

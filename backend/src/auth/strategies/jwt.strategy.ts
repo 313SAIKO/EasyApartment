@@ -7,7 +7,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import { ConfigService } from '@nestjs/config';
-import { isObjectIdOrHexString } from 'mongoose';
+import { isUUID } from 'class-validator';
 import type { JwtPayload } from '../types/jwt-payload.type';
 
 @Injectable()
@@ -25,10 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   validate(payload: JwtPayload) {
-    if (
-      typeof payload.sub !== 'string' ||
-      !isObjectIdOrHexString(payload.sub)
-    ) {
+    if (typeof payload.sub !== 'string' || !isUUID(payload.sub)) {
       throw new UnauthorizedException();
     }
     return payload;
