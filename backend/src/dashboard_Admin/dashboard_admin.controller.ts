@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Query,
   UseGuards,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -12,6 +13,13 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('dashboard-admin')
 export class DashboardAdminController {
   constructor(private readonly dashboardService: DashboardAdminService) {}
+
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles('admin')
+  @Get('reports')
+  report(@Query('period') period: string) {
+    return this.dashboardService.getReport(period);
+  }
 
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles('admin')

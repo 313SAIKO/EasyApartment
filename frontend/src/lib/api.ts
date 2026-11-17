@@ -24,7 +24,7 @@ function saveTokens(tokens: TokenPair) {
   localStorage.setItem("refreshToken", tokens.refresh_token);
 }
 
-function clearTokens() {
+export function clearTokens() {
   sessionVersion += 1;
   refreshedToken = undefined;
   localStorage.removeItem("accessToken");

@@ -1,9 +1,47 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
 @Injectable()
 export class DashboardAdminService {
   constructor(private readonly db: PrismaService) {}
+
+  async getReport(period: string) {
+    if (typeof period !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) {
+      throw new BadRequestException('Period must be YYYY-MM');
+    }
+    const invoices = await this.db.invoice.findMany({
+      where: { billingPeriod: period },
+      include: { room: true, tenant: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const total = invoices.reduce(
+      (sum, item) => sum.plus(item.grandTotal),
+      new Prisma.Decimal(0),
+    );
+    const paid = invoices.filter((item) => item.status === 'paid');
+    const collected = paid.reduce(
+      (sum, item) => sum.plus(item.grandTotal),
+      new Prisma.Decimal(0),
+    );
+    return {
+      period,
+      summary: {
+        totalInvoices: invoices.length,
+        paidInvoices: paid.length,
+        totalBilled: Number(total),
+        collected: Number(collected),
+        outstanding: Number(total.minus(collected)),
+      },
+      invoices: invoices.map((item) => ({
+        id: item.id,
+        roomNumber: item.room.roomNumber,
+        tenant: item.tenant.fullName ?? item.tenant.email,
+        amount: Number(item.grandTotal),
+        status: item.status,
+      })),
+    };
+  }
   async getStats() {
     const now = new Date();
     const year = now.getFullYear();

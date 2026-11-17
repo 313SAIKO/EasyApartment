@@ -17,6 +17,7 @@ model User {
   email            String        @unique
   passwordHash     String
   refreshTokenHash String?
+  sessionVersion   Int           @default(0)
   role             UserRole      @default(tenant)
   fullName         String?
   phone            String?

@@ -62,6 +62,15 @@ Contracts enforce one active contract per room. Deleting a contract cancels it a
 
 If PostgreSQL cannot connect, check the service, database existence and `DATABASE_URL`. Apply migrations before starting the API. For CORS errors, verify the frontend origin and backend API URL rather than disabling access controls.
 
+## Portfolio demo workflows
+
+- Logout, password changes and administrator password resets revoke existing access and refresh tokens. Each protected request checks the current account role. After upgrading to the session-version migration, sign in again; older tokens are rejected.
+- Room occupancy is controlled by active contracts. Manually marking an occupied room as available (or an empty room as occupied) returns a conflict. Bulk room creation rolls back the entire batch if any room fails.
+- Reports (`/admin/reports`) filter invoices by billing month, show billed/confirmed/outstanding totals, and export CSV. Confirmed totals belong to the invoice period, not the month cash was received.
+- Forgotten passwords use administrator-assisted recovery: the tenant contacts the apartment administrator, who verifies their identity and uses **กู้บัญชีผู้เช่า** to generate a temporary password. The tenant can then change it under **บัญชีของฉัน**. There is no automated reset email service; administrator-account recovery is outside this demo workflow.
+- Removing an avatar clears the image from that user's profile. It does not delete the cloud asset; cloud ownership verification and asset cleanup are deferred with the upload security work. Cloudinary is still required for real uploads.
+- Integration tests also cover immediate token revocation, tenant password recovery, bulk rollback, room-status conflicts, report totals/access, and avatar removal. Cloudinary remains mocked.
+
 ## Project origins and credits
 
 EasyApartment began as a student team project. This version is independently maintained by a member of the original team with the team's agreement. Credit for the original work goes to the EasyProperty Team; see the [original repository](https://github.com/kam345678/EasyApartment) for its contribution history.

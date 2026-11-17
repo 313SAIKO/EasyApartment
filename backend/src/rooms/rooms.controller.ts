@@ -45,16 +45,7 @@ export class RoomsController {
       throw new BadRequestException('Body must be a non-empty array of rooms');
     }
 
-    // เรียก create ทีละตัวผ่าน service
-    const results = await Promise.all(
-      createRoomDtos.map((dto) => this.roomsService.create(dto)),
-    );
-
-    return {
-      message: 'Rooms created successfully',
-      count: results.length,
-      data: results,
-    };
+    return this.roomsService.createMany(createRoomDtos);
   }
 
   @Get()

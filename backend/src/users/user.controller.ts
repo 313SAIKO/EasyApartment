@@ -15,6 +15,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { UpdateAvatarDto } from './dto/avatar.url.dto';
+import { ResetTenantPasswordDto } from './dto/reset-tenant-password.dto';
 interface JwtRequest extends Request {
   user: JwtPayload;
 }
@@ -29,6 +30,13 @@ export class UserController {
   @UseGuards(AccessTokenGuard, RolesGuard)
   createByAdmin(@Body() dto: CreateUserByAdminDto) {
     return this.usersService.createUserByAdmin(dto);
+  }
+
+  @Post('admin/reset-tenant-password')
+  @Roles('admin')
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  resetTenantPassword(@Body() dto: ResetTenantPasswordDto) {
+    return this.usersService.resetTenantPassword(dto.email);
   }
 
   //=========> reset password

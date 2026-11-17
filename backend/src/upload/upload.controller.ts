@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Delete,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -21,6 +22,12 @@ export class UploadController {
     private uploadService: UploadService,
     private usersService: UsersService,
   ) {}
+
+  @UseGuards(AccessTokenGuard)
+  @Delete('avatars')
+  removeAvatar(@Req() req: Request & { user: JwtPayload }) {
+    return this.usersService.removeAvatar(req.user.sub);
+  }
 
   //   @UseGuards(JwtAuthGuard, RolesGuard)
   //   @Roles('tenant')

@@ -80,7 +80,7 @@ export default function AdminProfilePage() {
         ...prev,
         profile: {
           ...prev.profile,
-          avatar: null,
+          avatar: { url: null, publicId: null },
         },
       }))
       setAlertType("success")
@@ -105,7 +105,7 @@ export default function AdminProfilePage() {
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <div className="flex items-center gap-6">
             <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center">
-              {(user as any)?.profile?.avatar.url ? (
+              {(user as any)?.profile?.avatar?.url ? (
                 <img src={(user as any).profile.avatar.url} alt="profile" className="w-full h-full object-cover" />
               ) : (
                 <div className="text-gray-400">No Image</div>
@@ -142,7 +142,7 @@ export default function AdminProfilePage() {
               <div className="w-full h-44 bg-white rounded-md flex items-center justify-center border border-dashed">
                 {previewUrl ? (
                   <img src={previewUrl} alt="preview" className="h-full object-contain" />
-                ) : (user as any)?.profile?.avatar.url ? (
+                ) : (user as any)?.profile?.avatar?.url ? (
                   <img src={(user as any).profile.avatar.url} alt="saved" className="h-full object-contain" />
                 ) : (
                   <div className="text-sm text-gray-400">No preview available</div>

@@ -103,14 +103,15 @@ export default function Home() {
               {mode === "forgot" && (
                 <div className="w-full transition-all">
                   <h2 className="text-3xl font-bold mb-2 text-center">ลืมรหัสผ่าน!</h2>
-                  <p className="text-slate-500 mb-8 font-medium text-center">
-                    ไม่ต้องห่วง! กรอกอีเมลของคุณเพื่อรีเซ็ตรหัสผ่าน
+                  <p className="text-slate-600 mb-6 leading-relaxed">
+                    หากคุณเป็นผู้เช่า ให้ติดต่อผู้ดูแลอพาร์ตเมนต์และแจ้งอีเมลที่ใช้สมัคร
+                    หลังตรวจสอบตัวตน ผู้ดูแลจะสร้างรหัสผ่านชั่วคราวให้คุณ
                   </p>
-
-                  <form className="space-y-4">
-                    <Input placeholder="Email" />
-                    <Button text="Confirm" />
-                  </form>
+                  <p className="text-sm text-slate-500 mb-6">
+                    เข้าสู่ระบบด้วยรหัสผ่านชั่วคราว แล้วเปลี่ยนรหัสผ่านในหน้า “บัญชีของฉัน”
+                    ระบบสาธิตนี้ไม่มีบริการส่งอีเมลรีเซ็ตอัตโนมัติ
+                    หากเป็นบัญชีผู้ดูแล ให้ติดต่อผู้ดูแลระบบที่ติดตั้งโปรเจกต์
+                  </p>
 
                   <div className="mt-6 text-sm text-center">
                     <button

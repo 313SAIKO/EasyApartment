@@ -16,6 +16,7 @@ function publicUser(user: User) {
     _id: user.id,
     email: user.email,
     role: user.role,
+    sessionVersion: user.sessionVersion,
     profile: {
       fullName: user.fullName,
       phone: user.phone,
@@ -74,9 +75,13 @@ export class UsersService {
     }
   }
 
-  setRefreshTokenHash(id: string, refreshTokenHash: string | null) {
+  setRefreshTokenHash(
+    id: string,
+    refreshTokenHash: string | null,
+    sessionVersion?: number,
+  ) {
     return this.db.user.updateMany({
-      where: { id },
+      where: { id, sessionVersion },
       data: { refreshTokenHash },
     });
   }
@@ -96,7 +101,7 @@ export class UsersService {
   setRole(id: string, role: UserRole) {
     return this.db.user.updateMany({
       where: { id },
-      data: { role, refreshTokenHash: null },
+      data: { role, refreshTokenHash: null, sessionVersion: { increment: 1 } },
     });
   }
 
@@ -140,6 +145,7 @@ export class UsersService {
       data: {
         passwordHash: await argon2.hash(newPassword),
         refreshTokenHash: null,
+        sessionVersion: { increment: 1 },
       },
     });
     return { message: 'Password changed successfully' };
@@ -158,6 +164,44 @@ export class UsersService {
       message: 'Avatar updated',
       avatar: { url: avatarUrl, publicId: avatarPublicId },
     };
+  }
+
+  revokeSessions(id: string) {
+    return this.db.user.updateMany({
+      where: { id },
+      data: {
+        refreshTokenHash: null,
+        sessionVersion: { increment: 1 },
+      },
+    });
+  }
+
+  async resetTenantPassword(email: string) {
+    const temporaryPassword = randomBytes(18).toString('base64url');
+    const result = await this.db.user.updateMany({
+      where: {
+        email: email.trim().toLowerCase(),
+        role: 'tenant',
+      },
+      data: {
+        passwordHash: await argon2.hash(temporaryPassword),
+        refreshTokenHash: null,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    if (!result.count) throw new NotFoundException('Tenant account not found');
+    return { temporaryPassword };
+  }
+
+  async removeAvatar(id: string) {
+    const user = await this.db.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException();
+    // Unlink only this account's image. Cloud file cleanup remains with the upload workflow.
+    await this.db.user.update({
+      where: { id },
+      data: { avatarUrl: null, avatarPublicId: null },
+    });
+    return { message: 'Avatar removed', avatar: { url: null, publicId: null } };
   }
 
   async findById(id: string) {

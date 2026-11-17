@@ -14,6 +14,7 @@ const items = [
   { href: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
   { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/reports', label: 'Reports', icon: BarChart2 },
+  { href: '/admin/account-recovery', label: 'กู้บัญชีผู้เช่า', icon: UserPlus },
 ]
 
 interface SidebarProps {

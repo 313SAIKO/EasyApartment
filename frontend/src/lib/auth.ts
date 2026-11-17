@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { clearTokens } from "./api";
 
 export async function getProfile() {
   try {
@@ -23,6 +23,7 @@ export async function changePassword(
       newPassword,
       confirmNewpassword,
     });
+    clearTokens();
     return res.data;
   } catch (error: any) {
     const message =

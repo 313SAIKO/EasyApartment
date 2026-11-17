@@ -29,7 +29,12 @@ export class AuthService {
   private normalizeEmail(email: string) {
     return email.trim().toLowerCase(); //ทำให้อีเมลเป็นมาตรฐานเดียวกัน ลบช่องว่างข้างหน้า-ข้างหลัง + แปลงเป็นตัวพิมพ์เล็กทั้งหมด
   }
-  private async signTokens(user: { id: string; email: string; role: string }) {
+  private async signTokens(user: {
+    id: string;
+    email: string;
+    role: string;
+    sessionVersion: number;
+  }) {
     const accessSecret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
 
     const refreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
@@ -44,7 +49,12 @@ export class AuthService {
       10,
     );
 
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      version: user.sessionVersion,
+    };
 
     const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(payload, {
@@ -62,10 +72,20 @@ export class AuthService {
     return { access_token, refresh_token };
   }
 
-  private async storeRefreshHash(userId: string, refreshToken: string) {
+  private async storeRefreshHash(
+    userId: string,
+    refreshToken: string,
+    version: number,
+  ) {
     const hash = await argon2.hash(refreshToken);
 
-    await this.usersService.setRefreshTokenHash(userId, hash);
+    const result = await this.usersService.setRefreshTokenHash(
+      userId,
+      hash,
+      version,
+    );
+    if (!result.count)
+      throw new UnauthorizedException('Session changed; sign in again');
   }
 
   //รับข้อมูลจาก dto ที่ส่งมาเพื่อลงทะเบียนผู้ใช้ใหม่ เป็น async เพราะมี DB + hash + jwt (ทั้งหมดเป็น async)
@@ -87,8 +107,13 @@ export class AuthService {
       id: String(newUser._id),
       email: newUser.email,
       role: newUser.role,
+      sessionVersion: newUser.sessionVersion,
     });
-    await this.storeRefreshHash(String(newUser._id), tokens.refresh_token);
+    await this.storeRefreshHash(
+      String(newUser._id),
+      tokens.refresh_token,
+      newUser.sessionVersion,
+    );
 
     //สร้าง JWT แล้วส่งกลับ
     return tokens;
@@ -111,9 +136,14 @@ export class AuthService {
       id: String(user._id),
       email: user.email,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     });
 
-    await this.storeRefreshHash(String(user._id), tokens.refresh_token);
+    await this.storeRefreshHash(
+      String(user._id),
+      tokens.refresh_token,
+      user.sessionVersion,
+    );
 
     return {
       ...tokens,
@@ -121,15 +151,17 @@ export class AuthService {
         id: user._id,
         email: user.email,
         role: user.role,
+        sessionVersion: user.sessionVersion,
         profile: user.profile ?? null,
       },
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string) {
+  async refreshTokens(userId: string, refreshToken: string, version?: number) {
     const user = await this.usersService.findByIdWithRefresh(userId);
 
-    if (!user?.refreshTokenHash) throw new ForbiddenException('Access denied');
+    if (!user?.refreshTokenHash || user.sessionVersion !== version)
+      throw new ForbiddenException('Access denied');
 
     const matches = await argon2.verify(user.refreshTokenHash, refreshToken);
 
@@ -139,6 +171,7 @@ export class AuthService {
       id: userId,
       email: user.email,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     });
     const hash = await argon2.hash(tokens.refresh_token);
     const rotated = await this.usersService.replaceRefreshTokenHash(
@@ -152,7 +185,7 @@ export class AuthService {
   }
 
   async logout(userId: string) {
-    await this.usersService.setRefreshTokenHash(userId, null);
+    await this.usersService.revokeSessions(userId);
 
     return { success: true };
   }
@@ -167,6 +200,7 @@ export class AuthService {
       userId: String(user._id),
       email: user.email,
       role: user.role,
+      sessionVersion: user.sessionVersion,
       profile: user.profile, // ถ้ามี
     };
   }

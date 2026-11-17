@@ -71,24 +71,99 @@ async function main() {
             .expect(201)
         ).body,
       );
-    const [admin, tenantA, tenantB] = logins.map((login) => login.access_token);
+    let [admin, tenantA, tenantB] = logins.map((login) => login.access_token);
     const managedEmail = `managed-${suffix}@example.invalid`;
     emails.push(managedEmail);
-    const managedDto = { email: managedEmail, role: 'tenant', profile: {
-      fullName: 'Integration Managed Tenant', phone: '0000000000', idCardNumber: 'TEST-ONLY',
-    } };
-    await auth(http.post(`${api}/users/admin/create-user`), tenantA).send(managedDto).expect(403);
-    const managed = await auth(http.post(`${api}/users/admin/create-user`), admin).send(managedDto).expect(201);
+    const managedDto = {
+      email: managedEmail,
+      role: 'tenant',
+      profile: {
+        fullName: 'Integration Managed Tenant',
+        phone: '0000000000',
+        idCardNumber: 'TEST-ONLY',
+      },
+    };
+    await auth(http.post(`${api}/users/admin/create-user`), tenantA)
+      .send(managedDto)
+      .expect(403);
+    const managed = await auth(
+      http.post(`${api}/users/admin/create-user`),
+      admin,
+    )
+      .send(managedDto)
+      .expect(201);
     assert(managed.body.temporaryPassword.length >= 12);
     assert.equal(managed.body.user.passwordHash, undefined);
-    await http.post(`${api}/auth/signin`).send({ email: managedEmail, password: managed.body.temporaryPassword }).expect(201);
+    await http
+      .post(`${api}/auth/signin`)
+      .send({ email: managedEmail, password: managed.body.temporaryPassword })
+      .expect(201);
     const newPassword = randomUUID();
-    await auth(http.patch(`${api}/users/me/password`), tenantB).send({
-      oldPassword: password, newPassword, confirmNewpassword: newPassword,
-    }).expect(200);
-    await http.post(`${api}/auth/signin`).send({ email: emails[2], password }).expect(401);
-    await auth(http.post(`${api}/auth/refresh`), logins[2].refresh_token).expect(403);
-    await http.post(`${api}/auth/signin`).send({ email: emails[2], password: newPassword }).expect(201);
+    await auth(http.patch(`${api}/users/me/password`), tenantB)
+      .send({
+        oldPassword: password,
+        newPassword,
+        confirmNewpassword: newPassword,
+      })
+      .expect(200);
+    await http
+      .post(`${api}/auth/signin`)
+      .send({ email: emails[2], password })
+      .expect(401);
+    await auth(
+      http.post(`${api}/auth/refresh`),
+      logins[2].refresh_token,
+    ).expect(403);
+    await auth(http.get(`${api}/auth/profile`), tenantB).expect(401);
+    tenantB = (
+      await http
+        .post(`${api}/auth/signin`)
+        .send({ email: emails[2], password: newPassword })
+        .expect(201)
+    ).body.access_token;
+    const managedLogin = (
+      await http
+        .post(`${api}/auth/signin`)
+        .send({ email: managedEmail, password: managed.body.temporaryPassword })
+        .expect(201)
+    ).body;
+    await http
+      .post(`${api}/users/admin/reset-tenant-password`)
+      .send({ email: managedEmail })
+      .expect(401);
+    await auth(http.post(`${api}/users/admin/reset-tenant-password`), tenantA)
+      .send({ email: managedEmail })
+      .expect(403);
+    await auth(http.post(`${api}/users/admin/reset-tenant-password`), admin)
+      .send({ email: emails[0] })
+      .expect(404);
+    const reset = await auth(
+      http.post(`${api}/users/admin/reset-tenant-password`),
+      admin,
+    )
+      .send({ email: managedEmail })
+      .expect(201);
+    await auth(
+      http.get(`${api}/auth/profile`),
+      managedLogin.access_token,
+    ).expect(401);
+    await auth(
+      http.post(`${api}/auth/refresh`),
+      managedLogin.refresh_token,
+    ).expect(403);
+    await http
+      .post(`${api}/auth/signin`)
+      .send({ email: managedEmail, password: managed.body.temporaryPassword })
+      .expect(401);
+    const resetLogin = (
+      await http
+        .post(`${api}/auth/signin`)
+        .send({ email: managedEmail, password: reset.body.temporaryPassword })
+        .expect(201)
+    ).body;
+    await auth(http.get(`${api}/auth/profile`), resetLogin.access_token).expect(
+      200,
+    );
     await auth(http.get(`${api}/rooms`), tenantA).expect(403);
     await http.get(`${api}/rooms`).expect(401);
     const room = (
@@ -102,6 +177,48 @@ async function main() {
         })
         .expect(201)
     ).body;
+    const bulkDto = {
+      floor: 1,
+      roomType: 'standard',
+      prices: 2500,
+      amenities: [],
+    };
+    await auth(http.post(`${api}/rooms/bulk`), admin)
+      .send([
+        { ...bulkDto, roomNumber: `${roomNumber}-bulk-a` },
+        { ...bulkDto, roomNumber },
+      ])
+      .expect(409);
+    assert.equal(
+      await db.room.count({ where: { roomNumber: `${roomNumber}-bulk-a` } }),
+      0,
+    );
+    await auth(http.post(`${api}/rooms/bulk`), admin)
+      .send([
+        { ...bulkDto, roomNumber: `${roomNumber}-bulk-a` },
+        { ...bulkDto, roomNumber: `${roomNumber}-bulk-b`, prices: -1 },
+      ])
+      .expect(400);
+    assert.equal(
+      await db.room.count({ where: { roomNumber: `${roomNumber}-bulk-a` } }),
+      0,
+    );
+    const bulk = await auth(http.post(`${api}/rooms/bulk`), admin)
+      .send([
+        { ...bulkDto, roomNumber: `${roomNumber}-bulk-a` },
+        { ...bulkDto, roomNumber: `${roomNumber}-bulk-b` },
+      ])
+      .expect(201);
+    assert.equal(bulk.body.count, 2);
+    await auth(http.patch(`${api}/rooms/${room._id}/status`), admin)
+      .send({ status: 'occupied' })
+      .expect(409);
+    await auth(http.patch(`${api}/rooms/${room._id}/status`), admin)
+      .send({ status: 'cleaning' })
+      .expect(200);
+    await auth(http.patch(`${api}/rooms/${room._id}/status`), admin)
+      .send({ status: 'available' })
+      .expect(200);
     const contractDto = {
       roomId: room._id,
       tenantId: users[1].id,
@@ -126,6 +243,12 @@ async function main() {
       404,
     );
     await auth(http.get(`${api}/contracts/me`), tenantA).expect(200);
+    await auth(http.patch(`${api}/rooms/${room._id}/status`), admin)
+      .send({ status: 'available' })
+      .expect(409);
+    await auth(http.patch(`${api}/rooms/${room._id}/status`), tenantA)
+      .send({ status: 'occupied' })
+      .expect(403);
     assert.equal(
       (await db.room.findUniqueOrThrow({ where: { id: room._id } })).status,
       'occupied',
@@ -228,6 +351,75 @@ async function main() {
       admin,
     ).expect(200);
     assert.equal(dashboard.body.revenueChart.length, 12);
+    await http.get(`${api}/dashboard-admin/reports?period=2026-11`).expect(401);
+    await auth(
+      http.get(`${api}/dashboard-admin/reports?period=2026-11`),
+      tenantA,
+    ).expect(403);
+    await auth(
+      http.get(`${api}/dashboard-admin/reports?period=2026-13`),
+      admin,
+    ).expect(400);
+    const report = (
+      await auth(
+        http.get(`${api}/dashboard-admin/reports?period=2026-11`),
+        admin,
+      ).expect(200)
+    ).body;
+    assert(
+      report.invoices.some(
+        (item) =>
+          item.id === invoice._id &&
+          item.status === 'paid' &&
+          item.amount === 4000,
+      ),
+    );
+    assert.equal(
+      report.summary.totalBilled,
+      report.invoices.reduce((sum, item) => sum + item.amount, 0),
+    );
+    assert.equal(
+      report.summary.collected,
+      report.invoices
+        .filter((item) => item.status === 'paid')
+        .reduce((sum, item) => sum + item.amount, 0),
+    );
+    assert.equal(
+      report.summary.outstanding,
+      report.summary.totalBilled - report.summary.collected,
+    );
+    const avatar = await auth(
+      http.post(`${api}/upload/avatars`),
+      resetLogin.access_token,
+    )
+      .attach('file', Buffer.from('avatar-fixture'), 'avatar.png')
+      .expect(201);
+    assert(avatar.body.avatar.url);
+    await http.delete(`${api}/upload/avatars`).expect(401);
+    const removed = await auth(
+      http.delete(`${api}/upload/avatars`),
+      resetLogin.access_token,
+    ).expect(200);
+    assert.equal(removed.body.avatar.url, null);
+    assert.equal(
+      (await db.user.findUniqueOrThrow({ where: { email: managedEmail } }))
+        .avatarPublicId,
+      null,
+    );
+    await auth(
+      http.delete(`${api}/upload/avatars`),
+      resetLogin.access_token,
+    ).expect(200);
+    // The guard must use the current database role even if the token still says admin.
+    await db.user.update({
+      where: { id: users[0].id },
+      data: { role: 'tenant' },
+    });
+    await auth(http.get(`${api}/rooms`), admin).expect(403);
+    await db.user.update({
+      where: { id: users[0].id },
+      data: { role: 'admin' },
+    });
     await auth(http.delete(`${api}/maintenance/${job._id}`), admin).expect(200);
     const refresh = (value) => auth(http.post(`${api}/auth/refresh`), value);
     const attempts = await Promise.all([
@@ -246,6 +438,9 @@ async function main() {
       201,
     );
     await refresh(renewed.refresh_token).expect(403);
+    await auth(http.get(`${api}/auth/profile`), renewed.access_token).expect(
+      401,
+    );
     await auth(http.delete(`${api}/contracts/${contract._id}`), admin).expect(
       200,
     );
@@ -265,7 +460,13 @@ async function main() {
     await db.maintenance.deleteMany({ where: { reportedById: { in: ids } } });
     await db.invoice.deleteMany({ where: { tenantId: { in: ids } } });
     await db.contract.deleteMany({ where: { tenantId: { in: ids } } });
-    await db.room.deleteMany({ where: { roomNumber } });
+    await db.room.deleteMany({
+      where: {
+        roomNumber: {
+          in: [roomNumber, `${roomNumber}-bulk-a`, `${roomNumber}-bulk-b`],
+        },
+      },
+    });
     await db.user.deleteMany({ where: { email: { in: emails } } });
     await app.close();
   }

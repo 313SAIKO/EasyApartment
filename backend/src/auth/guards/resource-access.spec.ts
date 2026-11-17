@@ -74,7 +74,8 @@ describe('Apartment resource access', () => {
     { _id: '00000000-0000-4000-8000-000000000021', roomNumber: '101' },
   ];
   const jwt = new JwtService({ secret });
-  const token = (sub: string, role = 'tenant') => jwt.sign({ sub, role });
+  const token = (sub: string, role = 'tenant') =>
+    jwt.sign({ sub, role, version: sub === tenantA ? user.sessionVersion : 0 });
   const credentials = {
     email: 'tenant@example.invalid',
     password: 'test-password',
@@ -84,6 +85,7 @@ describe('Apartment resource access', () => {
     email: credentials.email,
     role: 'tenant',
     passwordHash: '',
+    sessionVersion: 0,
     refreshTokenHash: null as string | null,
   };
   let app: INestApplication<App>;
@@ -129,21 +131,47 @@ describe('Apartment resource access', () => {
             },
             contract: { findFirst },
             user: {
-              findUnique: async () => ({ ...user, id: user._id }),
+              findUnique: async ({
+                where,
+              }: {
+                where: { id?: string; email?: string };
+              }) => {
+                if (where.email || where.id === tenantA)
+                  return { ...user, id: user._id };
+                if (where.id === tenantB || where.id === admin)
+                  return {
+                    ...user,
+                    id: where.id,
+                    sessionVersion: 0,
+                    role: where.id === admin ? 'admin' : 'tenant',
+                  };
+                return null;
+              },
               updateMany: async ({
                 where,
                 data,
               }: {
-                where: { id: string; refreshTokenHash?: string };
-                data: { refreshTokenHash: string | null };
+                where: {
+                  id: string;
+                  refreshTokenHash?: string;
+                  sessionVersion?: number;
+                };
+                data: {
+                  refreshTokenHash: string | null;
+                  sessionVersion?: { increment: number };
+                };
               }) => {
                 if (
                   where.id !== user._id ||
+                  (where.sessionVersion !== undefined &&
+                    where.sessionVersion !== user.sessionVersion) ||
                   (where.refreshTokenHash !== undefined &&
                     where.refreshTokenHash !== user.refreshTokenHash)
                 )
                   return { count: 0 };
                 user.refreshTokenHash = data.refreshTokenHash;
+                if (data.sessionVersion)
+                  user.sessionVersion += data.sessionVersion.increment;
                 return { count: 1 };
               },
             },
@@ -209,6 +237,10 @@ describe('Apartment resource access', () => {
       .auth(renewed.access_token, { type: 'bearer' })
       .expect(201, { success: true });
     await refresh(renewed.refresh_token).expect(403);
+    await http
+      .get(invoicePath)
+      .auth(renewed.access_token, { type: 'bearer' })
+      .expect(401);
   });
 
   it.each(['invoices', 'contracts'])(
