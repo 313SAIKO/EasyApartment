@@ -3,11 +3,21 @@ import { changePassword } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { getProfile } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+import { useAuth } from "@/context/AuthContext";
+import axios from "axios";
 import api from "@/lib/api";
 import { getMyContract } from "@/services/contracts.service";
 import ModalAlert from "@/components/ModalAlert";
 
 export default function Account() {
+  const { setUser: setAuthUser } = useAuth();
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [contractError, setContractError] = useState("");
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -31,6 +41,10 @@ export default function Account() {
   // avatar
   const [uploading, setUploading] = useState(false);
   async function handleAvatarUpload(file: File) {
+    if (uploading) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setAlertType("error"); setAlertMessage("กรุณาเลือกรูป JPG, PNG หรือ WEBP ขนาดไม่เกิน 5 MB"); setAlertOpen(true); return;
+    }
     try {
       setUploading(true);
 
@@ -47,13 +61,14 @@ export default function Account() {
           avatar: data.avatar,
         },
       }));
+      setAuthUser(previous => previous ? { ...previous, profile: { ...previous.profile, avatar: data.avatar } } : previous);
       setAlertType("success");
       setAlertMessage("อัปโหลดรูปโปรไฟล์สำเร็จ");
       setAlertOpen(true);
     } catch (err) {
       console.error("Upload failed", err);
       setAlertType("error");
-      setAlertMessage("อัปโหลดรูปโปรไฟล์ไม่สำเร็จ");
+      setAlertMessage(uiError(err, "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ"));
       setAlertOpen(true);
     } finally {
       setUploading(false);
@@ -81,7 +96,7 @@ export default function Account() {
         const data = await getMyContract();
         setContract(data);
       } catch (error) {
-        console.error("Failed to fetch contract:", error);
+        if (!axios.isAxiosError(error) || error.response?.status !== 404) setContractError(uiError(error));
       } finally {
         setContractLoading(false);
       }
@@ -90,14 +105,33 @@ export default function Account() {
     fetchContract();
   }, []);
 
-  if (loading) return <div className="p-6">Loading...</div>;
-  if (!user) return <div className="p-6 text-red-500">ไม่พบข้อมูลผู้ใช้</div>;
+  if (loading) return <div className="p-6">กำลังโหลดบัญชี…</div>;
+  if (!user) return <PageState error message="โหลดข้อมูลบัญชีไม่สำเร็จ" />;
+
+  async function saveProfile() {
+    if (saving) return;
+    if (!fullName.trim() || !/^(?=.*[0-9])[0-9+() -]{7,20}$/.test(phone.trim())) {
+      setAlertType("error"); setAlertMessage("กรุณากรอกชื่อและเบอร์โทรให้ถูกต้อง"); setAlertOpen(true); return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await api.patch("/users/me/profile", { fullName: fullName.trim(), phone: phone.trim() });
+      setUser((previous: any) => ({ ...previous, profile: data.profile }));
+      setAuthUser(previous => previous ? { ...previous, profile: data.profile } : previous);
+      setEditMode(false); setAlertType("success"); setAlertMessage("บันทึกข้อมูลส่วนตัวแล้ว");
+    } catch (error) { setAlertType("error"); setAlertMessage(uiError(error)); }
+    finally { setSaving(false); setAlertOpen(true); }
+  }
 
   /* ============== เปลี่ยนรหัสผ่าน ======================= */
   async function handleChangePassword() {
+    if (passwordBusy) return;
     setPasswordError("");
     setPasswordSuccess("");
 
+    if (!oldPassword || newPassword.length < 8) {
+      setAlertType("error"); setAlertMessage("กรุณากรอกรหัสผ่านปัจจุบันและรหัสผ่านใหม่อย่างน้อย 8 ตัวอักษร"); setAlertOpen(true); return;
+    }
     if (newPassword !== confirmNewpassword) {
       setAlertType("error");
       setAlertMessage("รหัสผ่านใหม่ไม่ตรงกัน");
@@ -105,6 +139,7 @@ export default function Account() {
       return;
     }
 
+    setPasswordBusy(true);
     try {
       const res = await changePassword(
         oldPassword,
@@ -118,15 +153,10 @@ export default function Account() {
         router.push("/login");
       }, 1500);
     } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "เปลี่ยนรหัสผ่านไม่สำเร็จ";
-
       setAlertType("error");
-      setAlertMessage(message);
+      setAlertMessage(uiError(error, "เปลี่ยนรหัสผ่านไม่สำเร็จ"));
       setAlertOpen(true);
-    }
+    } finally { setPasswordBusy(false); }
   }
 
   return (
@@ -135,9 +165,9 @@ export default function Account() {
       <div className="bg-white shadow rounded-2xl p-6 space-y-4">
         <h2 className="text-xl font-bold">ข้อมูลส่วนตัว</h2>
 
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-6">
           <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center text-gray-500">
-            {user.profile?.avatar.url ? (
+            {user.profile?.avatar?.url ? (
               <img
                 src={user.profile.avatar.url}
                 alt="avatar"
@@ -152,7 +182,8 @@ export default function Account() {
             {uploading ? "กำลังอัปโหลด..." : "เปลี่ยนรูปโปรไฟล์"}
             <input
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={uploading}
               hidden
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -167,32 +198,32 @@ export default function Account() {
           <div className="space-y-3">
             <input
               className="w-full border rounded-lg p-2"
-              defaultValue={user.profile?.fullName}
+              value={fullName} onChange={e => setFullName(e.target.value)} maxLength={120} aria-label="ชื่อ-นามสกุล"
               placeholder="ชื่อ-นามสกุล"
             />
             <input
               className="w-full border rounded-lg p-2"
-              defaultValue={user.profile?.phone}
+              value={phone} onChange={e => setPhone(e.target.value)} maxLength={20} aria-label="เบอร์โทร"
               placeholder="เบอร์โทร"
             />
 
             <div className="flex gap-3">
               <button
                 className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
-                onClick={() => setEditMode(false)}
+                disabled={saving} onClick={saveProfile}
               >
                 บันทึก
               </button>
               <button
                 className="px-4 py-2 bg-gray-400 text-white rounded-lg text-sm"
-                onClick={() => setEditMode(false)}
+                disabled={saving} onClick={() => setEditMode(false)}
               >
                 ยกเลิก
               </button>
             </div>
           </div>
         ) : (
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 break-words text-sm">
             <p>
               <strong>Email:</strong> {user.email}
             </p>
@@ -208,7 +239,7 @@ export default function Account() {
 
             <button
               className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm"
-              onClick={() => setEditMode(true)}
+              onClick={() => { setFullName(user.profile?.fullName ?? ""); setPhone(user.profile?.phone ?? ""); setEditMode(true); }}
             >
               แก้ไขข้อมูล
             </button>
@@ -246,7 +277,7 @@ export default function Account() {
           />
 
           <button
-            onClick={handleChangePassword}
+            disabled={passwordBusy || !oldPassword || newPassword.length < 8 || !confirmNewpassword} onClick={handleChangePassword}
             className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm"
           >
             เปลี่ยนรหัสผ่าน
@@ -260,7 +291,7 @@ export default function Account() {
 
         {contractLoading ? (
           <div className="text-sm text-gray-500">กำลังโหลดข้อมูลสัญญา...</div>
-        ) : contract ? (
+        ) : contractError ? <PageState error message={contractError} /> : contract ? (
           <div className="text-sm space-y-2">
             <p>
               <strong>เลขห้อง:</strong> {contract.roomId?.roomNumber || "-"}

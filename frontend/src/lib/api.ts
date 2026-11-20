@@ -1,3 +1,4 @@
+import { uiError } from "./ui-error";
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
 type TokenPair = { access_token: string; refresh_token: string };
@@ -127,10 +128,8 @@ export async function signIn(email: string, password: string) {
     saveTokens(data);
     return { user: data.user };
   } catch (error: unknown) {
-    const message = axios.isAxiosError<{ message?: string | string[] }>(error)
-      ? error.response?.data?.message
-      : undefined;
-    return { error: (Array.isArray(message) ? message[0] : message) || "Login failed" };
+    return { error: axios.isAxiosError(error) && error.response?.status === 401
+      ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : uiError(error, "เข้าสู่ระบบไม่สำเร็จ") };
   }
 }
 

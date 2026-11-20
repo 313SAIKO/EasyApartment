@@ -1,5 +1,8 @@
 "use client";
 
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
@@ -7,6 +10,7 @@ import { invoiceService } from "@/services/invoice.service";
 
 export default function BillsPage() {
   const [bills, setBills] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,7 +20,8 @@ export default function BillsPage() {
        const data = await invoiceService.getMyInvoices();
         setBills(data);
       } catch (error) {
-        console.error("Failed to fetch invoices:", error);
+        setLoadError(uiError(error));
+console.error("Failed to fetch invoices:", error);
       } finally {
         setLoading(false);
       }
@@ -35,7 +40,7 @@ export default function BillsPage() {
         <div className="flex flex-col gap-4">
           {loading ? (
             <p className="text-gray-500">กำลังโหลดข้อมูล...</p>
-          ) : bills.length === 0 ? (
+          ) : loadError ? <PageState error message={loadError} /> : bills.length === 0 ? (
             <p className="text-gray-500">ไม่มีใบแจ้งหนี้</p>
           ) : (
             bills.map((bill) => (
@@ -101,7 +106,7 @@ export default function BillsPage() {
 
                 {/* --- ส่วนล่าง: ปุ่มชำระเงิน (แสดงเฉพาะสถานะ pending หรือ rejected) --- */}
                 {(bill.payment?.status === "pending" ||
-                  bill.payment?.status === "rejected") && (
+                  bill.payment?.status === "rejected" || bill.payment?.status === "overdue") && (
                   <div className="mt-4 border-t border-gray-100 pt-3">
                     <div className="flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors group-hover:bg-indigo-500">
                       ชำระเงิน

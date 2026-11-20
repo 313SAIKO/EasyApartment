@@ -1,9 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
 import ModalAlert from "@/components/ModalAlert";
 
 export default function BillingPage() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [contracts, setContracts] = useState<any[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
 
@@ -42,7 +47,9 @@ export default function BillingPage() {
           setContractId(activeContracts[0]._id);
         }
       } catch (err) {
-        console.error("Failed to load contracts", err);
+        setLoadError(uiError(err, "โหลดข้อมูลห้องไม่สำเร็จ"));
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -66,6 +73,11 @@ export default function BillingPage() {
 
   // ✅ แก้ไขส่วนนี้: ส่งเฉพาะฟิลด์ที่ Backend อนุญาต (ตัดฟิลด์ที่เกินออก)
   const handleCreateInvoice = async () => {
+    if (saving) return;
+    if (!contractId || !billingPeriod || !waterCurrent || !electricCurrent || Number(waterCurrent) < previousWater || Number(electricCurrent) < previousElectric || serviceFee < 0) {
+      setModalType("error"); setModalMessage("กรุณาเลือกห้องและรอบบิล กรอกมิเตอร์ไม่น้อยกว่าครั้งก่อน และค่าบริการไม่ติดลบ"); setModalOpen(true); return;
+    }
+    setSaving(true);
     try {
       const payload = {
         contractId,
@@ -90,7 +102,7 @@ export default function BillingPage() {
       setContracts((items) => items.map((contract) => contract._id === contractId
         ? { ...contract, roomId: res.data.roomId } : contract));
 
-      console.log("Invoice created:", res.data);
+
       setModalType("success");
       setModalMessage("สร้างใบแจ้งหนี้สำเร็จ");
       setModalOpen(true);
@@ -101,18 +113,15 @@ export default function BillingPage() {
       setServiceFee(0);
     } catch (error: any) {
       console.error("Create invoice failed:", error.response?.data || error);
-      const errorMsg = error.response?.data?.message;
-
       setModalType("error");
-      setModalMessage(
-        "สร้างบิลไม่สำเร็จ: " +
-          (Array.isArray(errorMsg)
-            ? errorMsg.join(", ")
-            : errorMsg || "Error 400"),
-      );
+      setModalMessage(uiError(error, "สร้างใบแจ้งหนี้ไม่สำเร็จ"));
       setModalOpen(true);
-    }
+    } finally { setSaving(false); }
   };
+
+  if (loading) return <PageState message="กำลังโหลดข้อมูลห้อง..." />;
+  if (loadError) return <PageState message={loadError} error />;
+  if (!contracts.length) return <PageState message="ยังไม่มีห้องที่มีสัญญาใช้งาน กรุณาลงทะเบียนผู้เช่าและสร้างสัญญาก่อนออกใบแจ้งหนี้" />;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -151,6 +160,7 @@ export default function BillingPage() {
                 onChange={(e) => {
                   const roomId = e.target.value;
                   setSelectedRoomId(roomId);
+                  setWaterCurrent(""); setElectricCurrent("");
                   const found = contracts.find((c) => c.roomId._id === roomId);
                   if (found) setContractId(found._id);
                 }}
@@ -358,7 +368,7 @@ export default function BillingPage() {
             </div>
 
             {/* Grand Total */}
-            <div className="bg-gray-900 rounded-xl p-5 flex items-center justify-between mt-5">
+            <div className="bg-gray-900 rounded-xl p-5 flex flex-wrap gap-3 items-center justify-between mt-5">
               <div>
                 <p className="text-xs text-gray-400">ยอดรวมทั้งหมด</p>
                 <p className="text-gray-500 text-xs mt-0.5">
@@ -387,10 +397,11 @@ export default function BillingPage() {
 
         {/* ── Submit ── */}
         <button
+          disabled={saving}
           onClick={handleCreateInvoice}
           className="w-full bg-gray-900 hover:bg-gray-700 active:scale-[0.99] text-white py-4 rounded-2xl font-semibold text-base tracking-wide transition-all duration-150 shadow-lg shadow-gray-900/20"
         >
-          สร้างใบแจ้งหนี้
+          {saving ? "กำลังสร้างใบแจ้งหนี้..." : "สร้างใบแจ้งหนี้"}
         </button>
       </div>
       <ModalAlert

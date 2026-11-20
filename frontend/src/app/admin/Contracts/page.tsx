@@ -6,6 +6,8 @@ import {
   getAllContracts,
   deleteContract,
 } from "@/services/contracts.service"
+import PageState from "@/components/PageState"
+import { uiError } from "@/lib/ui-error"
 import ModalAlert from "@/components/ModalAlert"
 
 export default function ContractsPage() {
@@ -22,11 +24,12 @@ export default function ContractsPage() {
   const fetchContracts = async () => {
     try {
       setLoading(true)
+      setError(null)
       const data = await getAllContracts()
       setContracts(data)
     } catch (err: any) {
       console.error(err)
-      setError("Failed to load contracts")
+      setError(uiError(err, "โหลดสัญญาไม่สำเร็จ"))
     } finally {
       setLoading(false)
     }
@@ -46,18 +49,18 @@ export default function ContractsPage() {
 
   const handleDelete = (id: string) => {
     setAlertType("info")
-    setAlertMessage("Are you sure you want to delete this contract?")
+    setAlertMessage("ต้องการยกเลิกสัญญานี้หรือไม่?")
     setAlertConfirmAction(() => async () => {
       try {
         await deleteContract(id)
         await fetchContracts()
         setAlertType("success")
-        setAlertMessage("Contract deleted successfully")
+        setAlertMessage("ยกเลิกสัญญาสำเร็จ")
         setAlertConfirmAction(undefined)
       } catch (err) {
         console.error("Delete failed", err)
         setAlertType("error")
-        setAlertMessage("Failed to delete contract")
+        setAlertMessage(uiError(err, "ยกเลิกสัญญาไม่สำเร็จ"))
         setAlertConfirmAction(undefined)
       }
     })
@@ -65,29 +68,29 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
+    <div className="min-h-screen bg-slate-50 p-3 sm:p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800">Contracts Management</h1>
+        <div className="flex flex-wrap gap-3 justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-slate-800">จัดการสัญญา</h1>
           <button
             onClick={() => router.push("/admin/Register")}
             className="bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
           >
-            + Create Contract
+            + สร้างสัญญา
           </button>
         </div>
 
         {loading && (
-          <div className="text-center py-10 font-semibold">Loading contracts...</div>
+          <div className="text-center py-10 font-semibold">กำลังโหลดสัญญา...</div>
         )}
 
         {error && (
-          <div className="text-center py-10 text-red-500 font-semibold">{error}</div>
+          <PageState message={error} error retry={fetchContracts} />
         )}
 
         {!loading && !error && (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden border">
-            <table className="w-full text-left">
+          <div className="bg-white rounded-xl shadow-sm overflow-x-auto border">
+            <table className="w-full min-w-[760px] text-left">
               <thead className="bg-slate-100 text-slate-600 text-sm uppercase">
                 <tr>
                   <th className="px-6 py-4">Room</th>
@@ -100,6 +103,7 @@ export default function ContractsPage() {
                 </tr>
               </thead>
               <tbody>
+                {contracts.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">ยังไม่มีสัญญา เริ่มต้นด้วยการสร้างสัญญาและลงทะเบียนผู้เช่า</td></tr>}
                 {contracts.map((contract) => (
                   <tr
                     key={contract._id}
@@ -139,10 +143,11 @@ export default function ContractsPage() {
                         Edit
                       </button>
                       <button
+                        disabled={contract.status === "cancelled"}
                         onClick={() => handleDelete(contract._id)}
                         className="px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-500"
                       >
-                        Delete
+                        ยกเลิกสัญญา
                       </button>
                     </td>
                   </tr>

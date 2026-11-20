@@ -4,6 +4,7 @@ import { Bell, Home, FileText, Wrench, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import PageState from "@/components/PageState";
 import { useAuth } from "@/context/AuthContext";
 export default function TenantLayout({
   children,
@@ -13,13 +14,15 @@ export default function TenantLayout({
   const pathname = usePathname();
 
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
 
   useEffect(() => {
-    if (!loading && user?.role !== "tenant") {
+    if (!loading && !error && user?.role !== "tenant") {
       router.replace(user?.role === "admin" ? "/admin" : "/login");
     }
-  }, [loading, router, user?.role]);
+  }, [loading, error, router, user?.role]);
+
+  if (error) return <PageState message={error} error />;
 
   if (loading) {
     return <p className="p-6 text-sm text-gray-500">กำลังโหลดบัญชี…</p>;
@@ -41,7 +44,7 @@ export default function TenantLayout({
             </div>
 
             {/* Middle: Desktop Menu */}
-            <nav className="hidden space-x-8 md:flex">
+            <nav className="hidden gap-4 md:flex">
               <Link
                 href="/tenant/dashboard"
                 className={`px-1 py-5 text-sm font-medium transition-colors ${
@@ -76,11 +79,6 @@ export default function TenantLayout({
 
             {/* Right: User Profile & Notification */}
             <div className="flex items-center gap-4">
-              <button className="relative text-gray-400 hover:text-gray-500">
-                <Bell size={20} />
-                <span className="absolute right-0 top-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-              </button>
-
               <Link href="/tenant/account">
               <div className="flex cursor-pointer items-center gap-2 border-l border-gray-200 pl-4">
                 <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-bold text-indigo-600">
@@ -94,8 +92,8 @@ export default function TenantLayout({
                     user?.profile?.fullName?.charAt(0) || "U"
                   )}
                 </div>
-                <span className="hidden text-sm font-medium sm:block">
-                  {user?.profile?.fullName || "Loading..."}
+                <span className="hidden max-w-40 truncate text-sm font-medium lg:block">
+                  {user?.profile?.fullName || user?.email || "บัญชีของฉัน"}
                 </span>
               </div>
               </Link>
@@ -106,12 +104,12 @@ export default function TenantLayout({
 
       {/* ================= MAIN CONTENT ================= */}
       {/* เผื่อพื้นที่ด้านล่าง (pb-24) ให้มือถือ เพื่อไม่ให้เมนูล่างบังเนื้อหา */}
-      <main className="flex-1 pb-24 md:pb-8">{children}</main>
+      <main className="min-w-0 flex-1 pb-24 md:pb-8">{children}</main>
 
       {/* ================= BOTTOM TAB BAR (Mobile) ================= */}
       <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
         <div className="mx-auto px-2">
-          <nav className="flex items-center justify-between rounded-t-2xl border-t bg-white/90 px-3 py-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] backdrop-blur">
+          <nav className="flex items-center justify-between rounded-t-2xl border-t bg-white/90 px-3 py-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] backdrop-blur pb-[max(0.5rem,env(safe-area-inset-bottom))]">
             <Link
               href="/tenant/dashboard"
               className={`flex flex-col items-center text-sm ${pathname === "/tenant/dashboard" ? "text-indigo-600" : "text-gray-500 hover:text-gray-900"}`}

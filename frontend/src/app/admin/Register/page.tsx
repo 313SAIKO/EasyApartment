@@ -5,6 +5,8 @@ import {
   User, Phone, ShieldCheck, UserCheck
 } from 'lucide-react'
 
+import PageState from "@/components/PageState"
+import { uiError } from "@/lib/ui-error"
 import ModalAlert from "@/components/ModalAlert"
 import axios from "axios"
 import api from "@/lib/api"
@@ -22,6 +24,10 @@ export default function RegisterTenantPage() {
     email: ''
   })
 
+  const [roomsLoading, setRoomsLoading] = useState(true)
+  const [roomsError, setRoomsError] = useState("")
+  const [createdAccount, setCreatedAccount] = useState<any>(null)
+  const [completed, setCompleted] = useState(false)
   const [rooms, setRooms] = useState<any[]>([]) 
   const [isLoading, setIsLoading] = useState(false)
   const [registrationResult, setRegistrationResult] = useState<{
@@ -48,7 +54,9 @@ export default function RegisterTenantPage() {
           setRooms(availableRooms);
         }
       } catch (error) {
-        console.error("Error fetching rooms:", error);
+        setRoomsError(uiError(error, "โหลดห้องว่างไม่สำเร็จ"));
+      } finally {
+        setRoomsLoading(false);
       }
     };
     fetchRooms();
@@ -73,6 +81,7 @@ export default function RegisterTenantPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isLoading || completed) return
     
     if (formData.idCard.length !== 13 || formData.phone.length !== 10) {
       setAlertType("error")
@@ -83,6 +92,9 @@ export default function RegisterTenantPage() {
 
     setIsLoading(true)
     try {
+      const selectedRoom = rooms.find(r => r.roomNumber === formData.roomNumber);
+      if (!selectedRoom) throw new Error("กรุณาเลือกห้องพักที่ว่าง");
+      if (formData.endDate < formData.startDate || Number(formData.deposit) < 0) throw new Error("กรุณาตรวจสอบวันสิ้นสุดสัญญาและเงินประกัน");
       // --- STEP 1: สร้าง USER ---
       const userPayload = {
         email: formData.email,
@@ -97,14 +109,15 @@ export default function RegisterTenantPage() {
         }
       }
 
-      const { data: userResult } = await api.post('/users/admin/create-user', userPayload)
+      const userResult = createdAccount || (await api.post('/users/admin/create-user', userPayload)).data
+      setCreatedAccount(userResult)
+      setRegistrationResult({ username: userResult.user?.email || formData.email, tempPassword: userResult.temporaryPassword })
 
       const newUserId = userResult.user?._id; 
       const tempPass = userResult.temporaryPassword;
 
       // --- STEP 2: ค้นหาห้อง ---
-      const selectedRoom = rooms.find(r => r.roomNumber === formData.roomNumber);
-      if (!selectedRoom) throw new Error("ไม่พบข้อมูลห้องพักที่เลือก")
+
 
       // --- STEP 3: สร้าง CONTRACT ---
       const contractPayload = {
@@ -122,6 +135,7 @@ export default function RegisterTenantPage() {
       }
 
       await api.post('/contracts', contractPayload)
+      setCompleted(true)
 
       setRegistrationResult({
         username: userResult.user?.email || formData.email,
@@ -132,11 +146,8 @@ export default function RegisterTenantPage() {
       setAlertOpen(true)
 
     } catch (error: unknown) {
-      const message = axios.isAxiosError<{ message?: string | string[] }>(error)
-        ? error.response?.data?.message
-        : error instanceof Error ? error.message : undefined
       setAlertType("error")
-      setAlertMessage((Array.isArray(message) ? message.join(', ') : message) || "เกิดข้อผิดพลาด")
+      setAlertMessage(axios.isAxiosError(error) ? uiError(error) : error instanceof Error ? error.message : "ลงทะเบียนไม่สำเร็จ")
       setAlertOpen(true)
     } finally {
       setIsLoading(false)
@@ -144,11 +155,11 @@ export default function RegisterTenantPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-100 font-sans overflow-hidden text-slate-900">
+    <div className="min-h-screen flex flex-col bg-slate-100 font-sans text-slate-900">
       <main className="flex-1 overflow-auto custom-scrollbar">
         <div className="p-6 max-w-[1400px] mx-auto space-y-6 pb-12">
           
-          <div className="bg-[#1e293b] rounded-xl p-8 text-white shadow-lg flex items-start gap-6 border border-slate-700">
+          <div className="bg-[#1e293b] rounded-xl p-4 sm:p-8 text-white shadow-lg flex flex-wrap items-start gap-6 border border-slate-700">
             <div className="bg-blue-500 p-3 rounded-xl shadow-lg">
               <UserPlus size={40} className="text-white" />
             </div>
@@ -158,6 +169,11 @@ export default function RegisterTenantPage() {
             </div>
           </div>
 
+          {roomsLoading && <PageState message="กำลังโหลดห้องว่าง..." />}
+          {roomsError && <PageState message={roomsError} error />}
+          {!roomsLoading && !roomsError && !rooms.length && <PageState message="ยังไม่มีห้องว่างสำหรับลงทะเบียนผู้เช่า" />}
+          {createdAccount && !completed && <PageState message="สร้างบัญชีผู้เช่าแล้ว แต่สัญญายังไม่สำเร็จ กรุณาเก็บรหัสผ่านชั่วคราว ตรวจสอบข้อมูลห้องและสัญญา แล้วกดยืนยันอีกครั้งในหน้านี้ ระบบจะใช้บัญชีเดิม" />}
+          {completed && <div className="rounded-xl bg-green-50 p-4">ลงทะเบียนสำเร็จ กรุณาเก็บรหัสผ่านชั่วคราวก่อนออกจากหน้านี้ <button className="underline" onClick={() => window.location.reload()}>ลงทะเบียนผู้เช่ารายถัดไป</button></div>}
           <form onSubmit={handleSubmit} className="flex flex-col lg:flex-row items-stretch gap-0 bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden font-sans">
             <div className="lg:flex-[1.5] flex flex-col border-r border-slate-200 bg-white">
               <div className="p-6 border-b border-slate-300 bg-slate-50/50 flex items-center gap-2 font-black text-slate-800 uppercase text-sm">
@@ -168,10 +184,11 @@ export default function RegisterTenantPage() {
               <div className="p-8 space-y-6 flex-1">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm font-medium">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">หมายเลขห้องพัก (ว่าง)</label>
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1">หมายเลขห้องพัก (ว่าง)</label>
                     <div className="relative">
                       <Home className="absolute left-4 top-3 text-slate-400" size={16} />
                       <select 
+                        aria-label="หมายเลขห้องพัก"
                         name="roomNumber" 
                         value={formData.roomNumber} 
                         required 
@@ -191,31 +208,31 @@ export default function RegisterTenantPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">ชื่อ-นามสกุล</label>
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1">ชื่อ-นามสกุล</label>
                     <div className="relative">
                       <User className="absolute left-4 top-3 text-slate-400" size={16} />
-                      <input name="fullName" value={formData.fullName} required onChange={handleInputChange} placeholder="ชื่อจริง - นามสกุล" className="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500" />
+                      <input name="fullName" disabled={!!createdAccount || isLoading} value={formData.fullName} required onChange={handleInputChange} placeholder="ชื่อจริง - นามสกุล" className="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500" />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">เลขบัตรประชาชน (13 หลัก)</label>
-                    <input name="idCard" value={formData.idCard} required onChange={handleInputChange} placeholder="เลขบัตรประชาชน 13 หลัก" className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1">เลขบัตรประชาชน (13 หลัก)</label>
+                    <input name="idCard" disabled={!!createdAccount || isLoading} value={formData.idCard} required onChange={handleInputChange} placeholder="เลขบัตรประชาชน 13 หลัก" className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">เบอร์โทรศัพท์ (10 หลัก)</label>
-                    <input name="phone" value={formData.phone} required onChange={handleInputChange} placeholder="08XXXXXXXX" className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1">เบอร์โทรศัพท์ (10 หลัก)</label>
+                    <input name="phone" disabled={!!createdAccount || isLoading} value={formData.phone} required onChange={handleInputChange} placeholder="08XXXXXXXX" className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1 italic">วันเกิด</label>
-                    <input type="date" name="birthDate" value={formData.birthDate} required onChange={handleInputChange} className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1 italic">วันเกิด</label>
+                    <input type="date" name="birthDate" disabled={!!createdAccount || isLoading} value={formData.birthDate} required onChange={handleInputChange} className="w-full p-3 bg-slate-50 border rounded-xl outline-none" />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-500 uppercase ml-1">อีเมล (Username)</label>
-                    <input type="email" name="email" value={formData.email} required onChange={handleInputChange} placeholder="example@email.com" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" />
+                    <label className="text-xs font-black text-slate-500 uppercase ml-1">อีเมล (Username)</label>
+                    <input type="email" name="email" disabled={!!createdAccount || isLoading} value={formData.email} required onChange={handleInputChange} placeholder="example@email.com" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none" />
                   </div>
                 </div>
 
@@ -223,21 +240,21 @@ export default function RegisterTenantPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-blue-600">วันเริ่มสัญญา</label>
+                    <label className="text-xs font-bold text-blue-600">วันเริ่มสัญญา</label>
                     <input type="date" name="startDate" value={formData.startDate} required onChange={handleInputChange} className="w-full p-3 bg-blue-50 border-none rounded-xl text-sm font-bold text-blue-700" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-red-600">วันหมดสัญญา</label>
+                    <label className="text-xs font-bold text-red-600">วันหมดสัญญา</label>
                     <input type="date" name="endDate" value={formData.endDate} min={formData.startDate} required onChange={handleInputChange} className="w-full p-3 bg-red-50 border-none rounded-xl text-sm font-bold text-red-700" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-green-600">เงินประกัน (฿)</label>
-                    <input type="number" name="deposit" value={formData.deposit} required onChange={handleInputChange} placeholder="0.00" className="w-full p-3 bg-green-50 border-none rounded-xl text-sm font-bold text-green-700 outline-none" />
+                    <label className="text-xs font-bold text-green-600">เงินประกัน (฿)</label>
+                    <input type="number" min="0" name="deposit" value={formData.deposit} required onChange={handleInputChange} placeholder="0.00" className="w-full p-3 bg-green-50 border-none rounded-xl text-sm font-bold text-green-700 outline-none" />
                   </div>
                 </div>
 
                 <div className="pt-6">
-                  <button type="submit" disabled={isLoading} className={`w-full ${isLoading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-lg`}>
+                  <button type="submit" disabled={isLoading || roomsLoading || !!roomsError || !rooms.length || completed} className={`w-full ${isLoading ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-lg`}>
                     {isLoading ? 'กำลังบันทึกข้อมูล...' : 'ยืนยันการลงทะเบียน'}
                     {!isLoading && <ChevronRight size={20} />}
                   </button>
@@ -253,12 +270,12 @@ export default function RegisterTenantPage() {
               <div className="p-8 space-y-6 flex-1 flex flex-col justify-center">
                 <div className="space-y-4">
                   <div className={`p-5 bg-white border rounded-2xl shadow-sm space-y-2 ${registrationResult ? 'border-emerald-200' : 'border-slate-200'}`}>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Username</p>
-                    <p className="text-lg font-black text-slate-700">{registrationResult?.username || 'รอการบันทึก...'}</p>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Username</p>
+                    <p className="text-lg break-all font-black text-slate-700">{registrationResult?.username || 'รอการบันทึก...'}</p>
                   </div>
                   <div className={`p-5 bg-white border rounded-2xl shadow-sm space-y-2 ${registrationResult ? 'border-emerald-200 shadow-md' : 'border-slate-200'}`}>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Temporary Password</p>
-                    <p className="text-2xl font-bold text-blue-600 tracking-wider font-mono">{registrationResult?.tempPassword || '********'}</p>
+                    <p className="text-xs font-black text-blue-500 uppercase tracking-widest">Temporary Password</p>
+                    <p className="text-2xl break-all font-bold text-blue-600 tracking-wider font-mono">{registrationResult?.tempPassword || '********'}</p>
                   </div>
                 </div>
               </div>

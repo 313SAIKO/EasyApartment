@@ -5,6 +5,7 @@ import { useState, ChangeEvent, FormEvent } from "react"
 import { signIn } from "@/lib/api";
 
 export default function Home() {
+  const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"login"| "forgot">("login")
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +13,8 @@ export default function Home() {
 
   async function handleLogin(e?: FormEvent) {
     if (e) e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
       const data = await signIn(email, password);
@@ -37,14 +40,14 @@ export default function Home() {
       }
 
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "Login failed");
-    }
+      setError(error instanceof Error ? error.message : "เข้าสู่ระบบไม่สำเร็จ");
+    } finally { setBusy(false); }
   }
   return (
-      <div className="flex h-screen min-h-screen bg-white">
+      <div className="flex min-h-dvh bg-white">
 
         {/* LEFT SIDE */}
-        <div className="w-1/2 h-screen bg-slate-50 px-10 sm:px-16 py-12 flex flex-col">
+        <div className="w-full lg:w-1/2 min-h-dvh bg-slate-50 px-5 sm:px-12 py-8 flex flex-col">
 
           {/* Logo - อยู่บนสุด */}
           <div className="flex items-center gap-3">
@@ -57,7 +60,7 @@ export default function Home() {
                 className="object-cover"
               />
             </div>
-            <span className="text-lg font-semibold">EasyProperty</span>
+            <span className="text-lg font-semibold">EasyApartment</span>
           </div>
 
           {/* MAIN CONTENT - ส่วนนี้จะดันให้เนื้อหาอยู่กึ่งกลางพอดี */}
@@ -72,19 +75,15 @@ export default function Home() {
                   </p>
 
                   <form className="space-y-5" onSubmit={handleLogin}>
-                    <Input placeholder="Email" onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
+                    <Input type="email" placeholder="Email" onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} />
                     <Input placeholder="Password" type="password" onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} />
                     {error && (
-                      <p className="text-red-500 text-sm text-left -mt-2">
+                      <p role="alert" className="text-red-500 text-sm text-left -mt-2">
                         {error}
                       </p>
                     )}
 
                     <div className="flex items-center justify-between text-sm">
-                      <label className="flex items-center gap-2 text-slate-600 cursor-pointer">
-                        <input type="checkbox" className="rounded border-slate-300" />
-                        จดจำฉัน
-                      </label>
                       <button
                         type="button"
                         onClick={() => setMode("forgot")}
@@ -94,7 +93,7 @@ export default function Home() {
                       </button>
                     </div>
 
-                    <Button text="Confirm" />
+                    <button disabled={busy} className="w-full rounded-xl bg-blue-600 py-3 text-white disabled:opacity-50">{busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}</button>
                   </form>
                 </div>
               )}
@@ -128,12 +127,12 @@ export default function Home() {
 
           {/* Footer - อยู่ล่างสุด */}
           <div className="text-xs text-slate-400 mt-8 pt-4 border-t border-slate-200">
-            © 2026 EasyProperty • Property Management System
+            © 2026 EasyApartment • Property Management System
           </div>
         </div>
 
         {/* RIGHT SIDE IMAGE */}
-        <div className="w-1/2 h-screen relative overflow-hidden">
+        <div className="hidden lg:block w-1/2 min-h-dvh relative overflow-hidden">
           <Image
             src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1920&auto=format&fit=crop"
             alt="Modern House"
@@ -154,22 +153,13 @@ export default function Home() {
 function Input({ placeholder, type = "text", onChange }: { placeholder: string; type?: string; onChange?: (e: ChangeEvent<HTMLInputElement>) => void }) {
   return (
     <input
+      required
+      aria-label={placeholder}
+      autoComplete={type === "password" ? "current-password" : "username"}
       type={type}
       placeholder={placeholder}
       onChange={onChange}
       className="w-full rounded-xl border border-slate-200 px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
     />
-  )
-}
-
-function Button({ text, onClick }: { text: string; onClick?: () => void }) {
-  return (
-    <button
-      type="submit"
-      onClick={onClick}
-      className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white py-3.5 font-bold transition-all shadow-lg shadow-slate-200"
-    >
-      {text}
-    </button>
   )
 }

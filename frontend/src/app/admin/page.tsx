@@ -1,5 +1,8 @@
 "use client";
 
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+
 import { useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import RoomMatrix from "@/components/RoomMatrix";
@@ -10,11 +13,14 @@ import {
   X, User, FileText, 
   BedDouble, Zap, Droplets, Phone, Plus 
 } from "lucide-react";
+import Modal from "@/components/Modal";
 import ModalAlert from "@/components/ModalAlert";
 
 export default function AdminDashboard() {
+  const [saving, setSaving] = useState(false);
   const [floors, setFloors] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -46,7 +52,8 @@ export default function AdminDashboard() {
         }
         setSummary(summaryData);
       } catch (error) {
-        console.error("Dashboard Fetch Error:", error);
+        setLoadError(uiError(error));
+console.error("Dashboard Fetch Error:", error);
       } finally {
         setLoading(false);
       }
@@ -55,12 +62,15 @@ export default function AdminDashboard() {
   }, []);
 
   const handleRoomClick = (room: any) => {
+    setNewFurniture("");
     setSelectedRoom(room);
     setIsModalOpen(true);
   };
 
   // ✅ ฟังก์ชันอัปเดตเฟอร์นิเจอร์ (รักษาข้อมูลเก่าไว้ครบถ้วน)
   const handleUpdateFurniture = async (updatedList: string[]) => {
+    if (saving) return;
+    setSaving(true);
     try {
       const response = await fetchWithAuth(`/rooms/${selectedRoom._id}/amenities`, {
         method: 'PATCH',
@@ -85,7 +95,7 @@ export default function AdminDashboard() {
           )
         })));
         
-        console.log("บันทึกเฟอร์นิเจอร์สำเร็จ!");
+        setNewFurniture("");
         setAlertType("success");
         setAlertMessage("บันทึกข้อมูลสำเร็จ");
         setAlertOpen(true);
@@ -93,49 +103,52 @@ export default function AdminDashboard() {
     } catch (error: any) {
       console.error("Update Error:", error.response?.data || error);
       setAlertType("error");
-      setAlertMessage("ไม่สามารถบันทึกได้: " + (error.response?.data?.message || "เกิดข้อผิดพลาด"));
+      setAlertMessage(uiError(error, "บันทึกสิ่งอำนวยความสะดวกไม่สำเร็จ"));
       setAlertOpen(true);
-    }
+    } finally { setSaving(false); }
   };
 
   return (
-    <div className="space-y-6 p-6 bg-slate-50 min-h-screen font-sans">
+    <div className="space-y-6 p-2 sm:p-6 bg-slate-50 min-h-screen font-sans">
+      {loadError && <PageState error message={loadError} />}
       {/* --- ส่วนสถิติ --- */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="รายได้ทั้งหมด" value={summary ? `฿${summary.stats.monthlyRevenue?.toLocaleString()}` : "฿0"} borderColor="border-green-500" />
-        <StatCard title="อัตราการเข้าพัก" value={summary ? `${summary.stats.occupancyRate}%` : "0%"} borderColor="border-rose-400" />
-        <StatCard title="งานรอซ่อม" value={summary ? summary.stats.pendingMaintenance : "0"} borderColor="border-yellow-400" />
-        <StatCard title="ห้องว่าง" value={summary ? summary.stats.availableRooms : "0"} borderColor="border-green-400" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard title="รายรับเดือนนี้" value={summary ? `฿${summary.stats.monthlyRevenue?.toLocaleString()}` : "—"} borderColor="border-green-500" />
+        <StatCard title="อัตราการเข้าพัก" value={summary ? `${summary.stats.occupancyRate}%` : "—"} borderColor="border-rose-400" />
+        <StatCard title="งานรอซ่อม" value={summary ? summary.stats.pendingMaintenance : "—"} borderColor="border-yellow-400" />
+        <StatCard title="ห้องว่าง" value={summary ? summary.stats.availableRooms : "—"} borderColor="border-green-400" />
       </div>
 
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-7">
+        <div className="min-w-0 col-span-12 lg:col-span-7">
           {loading ? (
             <div className="bg-white p-12 rounded-[2rem] text-center shadow-sm border border-slate-100 animate-pulse text-slate-400">กำลังโหลด...</div>
-          ) : (
+          ) : loadError ? null : floors.length === 0 ? <PageState message="ยังไม่มีข้อมูลห้องพัก" /> : (
             <RoomMatrix floors={floors} onRoomClick={handleRoomClick} />
           )}
         </div>
-        <div className="col-span-12 lg:col-span-5 space-y-6">
+        <div className="min-w-0 col-span-12 lg:col-span-5 space-y-6">
           <RevenueChart data={summary?.revenueChart || []} />
-          <PaymentTable/>
+
         </div>
       </div>
 
+      <PaymentTable/>
+
       {/* --- Modal รายละเอียดห้องพัก --- */}
       {isModalOpen && selectedRoom && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <Modal panelClassName="max-w-2xl p-0" isOpen={isModalOpen} onClose={() => { if (!saving) setIsModalOpen(false); }}>
+          <div className="bg-white rounded-[2.5rem] w-full shadow-2xl animate-in zoom-in-95 duration-200">
             
             <div className={`p-8 text-white flex justify-between items-center ${selectedRoom.status === 'occupied' ? 'bg-rose-500' : 'bg-emerald-500'}`}>
               <div>
                 <h3 className="text-3xl font-black italic uppercase tracking-tighter">ห้อง {selectedRoom.roomNumber}</h3>
                 <p className="text-[10px] font-bold opacity-80 uppercase tracking-[0.2em]">{selectedRoom.roomType || 'Standard'} • Floor {selectedRoom.floor}</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="bg-white/20 p-2 rounded-full hover:bg-white/40 transition-colors"><X size={24} /></button>
+
             </div>
 
-            <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="p-4 sm:p-8 space-y-6 custom-scrollbar">
               {/* ราคาเช่า */}
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
                 <div>
@@ -146,20 +159,20 @@ export default function AdminDashboard() {
               </div>
 
               {/* มิเตอร์น้ำไฟ (ข้อมูลจะไม่หายแล้ว) */}
-              {selectedRoom.lastMeter && (
-                <div className="grid grid-cols-2 gap-4">
+              {selectedRoom.lastMeterReading && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-amber-50 p-4 rounded-3xl border border-amber-100 flex items-center gap-3">
                     <div className="bg-amber-500 p-2 rounded-xl text-white"><Zap size={16}/></div>
                     <div>
                       <p className="text-[10px] font-bold text-amber-600 leading-none mb-1">ไฟฟ้าล่าสุด</p>
-                      <p className="text-lg font-black text-slate-700">{selectedRoom.lastMeter.electric} u.</p>
+                      <p className="text-lg font-black text-slate-700">{selectedRoom.lastMeterReading.electric} u.</p>
                     </div>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-3xl border border-blue-100 flex items-center gap-3">
                     <div className="bg-blue-500 p-2 rounded-xl text-white"><Droplets size={16}/></div>
                     <div>
                       <p className="text-[10px] font-bold text-blue-600 leading-none mb-1">ประปาล่าสุด</p>
-                      <p className="text-lg font-black text-slate-700">{selectedRoom.lastMeter.water} u.</p>
+                      <p className="text-lg font-black text-slate-700">{selectedRoom.lastMeterReading.water} u.</p>
                     </div>
                   </div>
                 </div>
@@ -200,17 +213,17 @@ export default function AdminDashboard() {
                 <div className="flex gap-2">
                   <input 
                     type="text" value={newFurniture} onChange={(e) => setNewFurniture(e.target.value)}
-                    onKeyDown={(e) => { if(e.key === 'Enter' && newFurniture.trim()) { handleUpdateFurniture([...(selectedRoom.furniture || []), newFurniture.trim()]); setNewFurniture(""); } }}
-                    placeholder="เพิ่มรายการ..." className="flex-1 bg-slate-100 border-none rounded-2xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-400 outline-none"
+                    onKeyDown={(e) => { if(e.key === 'Enter' && newFurniture.trim()) { handleUpdateFurniture([...(selectedRoom.furniture || []), newFurniture.trim()]); } }}
+                    placeholder="เพิ่มรายการ..." className="min-w-0 flex-1 bg-slate-100 border-none rounded-2xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-400 outline-none"
                   />
-                  <button onClick={() => { if(newFurniture.trim()) { handleUpdateFurniture([...(selectedRoom.furniture || []), newFurniture.trim()]); setNewFurniture(""); } }}
+                  <button disabled={saving} aria-label="เพิ่มสิ่งอำนวยความสะดวก" onClick={() => { if(newFurniture.trim()) { handleUpdateFurniture([...(selectedRoom.furniture || []), newFurniture.trim()]); } }}
                     className="bg-blue-600 text-white p-3 rounded-2xl hover:bg-blue-700 transition-all"><Plus size={20} /></button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(selectedRoom.furniture || []).map((item: string, i: number) => (
                     <div key={i} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 text-[10px] rounded-2xl font-black uppercase border border-slate-200">
                       {item}
-                      <button onClick={() => { const newList = selectedRoom.furniture.filter((_: any, idx: number) => idx !== i); handleUpdateFurniture(newList); }}
+                      <button disabled={saving} aria-label={`ลบ ${item}`} onClick={() => { const newList = selectedRoom.furniture.filter((_: any, idx: number) => idx !== i); handleUpdateFurniture(newList); }}
                         className="text-slate-300 hover:text-rose-500 transition-colors"><X size={14} /></button>
                     </div>
                   ))}
@@ -220,7 +233,7 @@ export default function AdminDashboard() {
               
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     <ModalAlert
       open={alertOpen}

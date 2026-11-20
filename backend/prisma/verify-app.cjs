@@ -72,6 +72,23 @@ async function main() {
         ).body,
       );
     let [admin, tenantA, tenantB] = logins.map((login) => login.access_token);
+    const profilePatch = { fullName: '  UI Test Tenant  ', phone: '0800000001' };
+    await http.patch(`${api}/users/me/profile`).send(profilePatch).expect(401);
+    await auth(http.patch(`${api}/users/me/profile`), tenantA)
+      .send({ ...profilePatch, role: 'admin', id: users[2].id }).expect(400);
+    await auth(http.patch(`${api}/users/me/profile`), tenantA)
+      .send({ fullName: ' ', phone: 'invalid' }).expect(400);
+    const updatedProfile = await auth(http.patch(`${api}/users/me/profile`), tenantA)
+      .send(profilePatch).expect(200);
+    assert.equal(updatedProfile.body.profile.fullName, 'UI Test Tenant');
+    assert.equal(updatedProfile.body.passwordHash, undefined);
+    const persistedProfile = await db.user.findUniqueOrThrow({ where: { id: users[1].id } });
+    assert.equal(persistedProfile.fullName, 'UI Test Tenant');
+    assert.equal(persistedProfile.phone, profilePatch.phone);
+    assert.equal(persistedProfile.role, 'tenant');
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: users[2].id } })).phone, users[2].phone);
+    await auth(http.patch(`${api}/users/me/profile`), admin)
+      .send({ fullName: 'UI Test Admin', phone: '0800000002' }).expect(200);
     const managedEmail = `managed-${suffix}@example.invalid`;
     emails.push(managedEmail);
     const managedDto = {

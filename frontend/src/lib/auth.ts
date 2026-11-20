@@ -25,12 +25,7 @@ export async function changePassword(
     });
     clearTokens();
     return res.data;
-  } catch (error: any) {
-    const message =
-      error.response?.data?.message ||
-      error.message ||
-      "เปลี่ยนรหัสผ่านไม่สำเร็จ";
-
-    throw new Error(message); 
+  } catch (error: unknown) {
+    throw error;
   }
 }

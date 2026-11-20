@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import AdminTopNav from "@/components/AdminTopNav";
+import PageState from "@/components/PageState";
 import { useAuth } from "@/context/AuthContext";
 
 export default function AdminLayout({
@@ -13,18 +14,20 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
 
   useEffect(() => {
-    if (!loading && user?.role !== "admin") {
+    if (!loading && !error && user?.role !== "admin") {
       router.replace(user?.role === "tenant" ? "/tenant/dashboard" : "/login");
     }
-  }, [loading, router, user?.role]);
+  }, [loading, error, router, user?.role]);
+
+  if (error) return <PageState message={error} error />;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <p className="text-gray-500 text-sm">Loading admin panel...</p>
+        <p className="text-gray-500 text-sm">กำลังโหลดหน้าผู้ดูแล…</p>
       </div>
     );
   }
@@ -32,15 +35,15 @@ export default function AdminLayout({
   if (user?.role !== "admin") return null;
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gray-50 lg:h-screen lg:flex-row">
       {/* Sidebar */}
       <Sidebar pathname={pathname} />
 
       {/* Main Content */}
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <AdminTopNav user={user} />
+      <div className="flex min-w-0 flex-col flex-1 lg:overflow-hidden">
+        <AdminTopNav />
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="min-w-0 flex-1 p-3 sm:p-6 lg:overflow-y-auto">
           {children}
         </main>
       </div>

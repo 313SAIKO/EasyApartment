@@ -1,6 +1,10 @@
 "use client"
 
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+
 import { useEffect, useState } from "react"
+import Modal from "@/components/Modal"
 import ModalAlert from "@/components/ModalAlert"
 import api from "@/lib/api"
 
@@ -53,7 +57,9 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 export default function AdminMaintenancePage() {
+  const [saving, setSaving] = useState(false)
   const [data, setData] = useState<MaintenanceItem[]>([])
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<MaintenanceItem | null>(null)
   const [alertOpen, setAlertOpen] = useState(false)
@@ -66,6 +72,7 @@ export default function AdminMaintenancePage() {
   }, [])
 
   const fetchData = async () => {
+    setLoadError(""); setLoading(true)
     try {
       const { data: result } = await api.get("/maintenance")
 
@@ -86,13 +93,15 @@ export default function AdminMaintenancePage() {
 
       setData(formatted)
     } catch (error) {
-      console.error(error)
+      setLoadError(uiError(error, "โหลดรายการแจ้งซ่อมไม่สำเร็จ"))
     } finally {
       setLoading(false)
     }
   }
 
   const handleComplete = async (id: string) => {
+    if (saving) return
+    setSaving(true)
     try {
       await api.patch(`/maintenance/${id}/status`, { status: "completed" })
 
@@ -111,9 +120,9 @@ export default function AdminMaintenancePage() {
     } catch (error) {
       console.error(error)
       setAlertType("error")
-      setAlertMessage("อัปเดตสถานะไม่สำเร็จ")
+      setAlertMessage(uiError(error, "อัปเดตสถานะไม่สำเร็จ"))
       setAlertOpen(true)
-    }
+    } finally { setSaving(false) }
   }
 
   const handleDelete = (id: string) => {
@@ -132,7 +141,7 @@ export default function AdminMaintenancePage() {
       } catch (error) {
         console.error(error)
         setAlertType("error")
-        setAlertMessage("เกิดข้อผิดพลาดขณะลบงาน")
+        setAlertMessage(uiError(error, "ลบงานไม่สำเร็จ"))
         setAlertConfirmAction(undefined)
       }
     })
@@ -150,6 +159,7 @@ export default function AdminMaintenancePage() {
         </div>
       </div>
 
+      {loadError && <PageState message={loadError} error retry={fetchData} />}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -174,7 +184,7 @@ export default function AdminMaintenancePage() {
                     </div>
                   </td>
                 </tr>
-              ) : data.length === 0 ? (
+              ) : loadError ? null : data.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-gray-400">
                     ไม่มีรายการแจ้งซ่อมในขณะนี้
@@ -189,7 +199,7 @@ export default function AdminMaintenancePage() {
                   >
                     <td className="px-6 py-4 font-medium text-gray-900">{item.tenant}</td>
                     <td className="px-6 py-4 text-gray-600">{item.room}</td>
-                    <td className="px-6 py-4 text-gray-900 group-hover:text-indigo-600 transition-colors">{item.issue}</td>
+                    <td className="px-6 py-4 text-gray-900 group-hover:text-indigo-600 transition-colors"><button className="text-left underline" onClick={() => setSelectedItem(item)}>{item.issue}</button></td>
                     <td className="px-6 py-4">
                       <PriorityBadge value={item.priority} />
                     </td>
@@ -206,24 +216,16 @@ export default function AdminMaintenancePage() {
       </div>
 
       {selectedItem && (
-        <div
-          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity"
-          onClick={() => setSelectedItem(null)}
-        >
+        <Modal panelClassName="max-w-2xl p-0" isOpen={!!selectedItem} onClose={() => { if (!saving) setSelectedItem(null) }}>
           <div
-            className="bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl p-6 sm:p-8 relative transform transition-all"
+            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl p-6 sm:p-8 relative transform transition-all"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setSelectedItem(null)}
-              className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-            </button>
+
 
             <div className="mb-6">
               <h2 className="text-xl font-bold text-gray-900">Maintenance Detail</h2>
-              <p className="text-xs text-gray-500 mt-1">Ref ID: {selectedItem.id}</p>
+              <p className="break-all text-xs text-gray-500 mt-1">Ref ID: {selectedItem.id}</p>
             </div>
 
             <div className="space-y-4 text-sm">
@@ -281,9 +283,10 @@ export default function AdminMaintenancePage() {
               )}
 
               <div className="pt-6 flex flex-wrap gap-3 mt-4 border-t border-gray-100">
-                {selectedItem.status === "pending" && (
+                {selectedItem.status !== "resolved" && (
                   <button
-                    onClick={() => handleComplete(selectedItem.id)}
+                    disabled={saving}
+                      onClick={() => handleComplete(selectedItem.id)}
                     className="flex-1 sm:flex-none inline-flex justify-center items-center px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
@@ -302,7 +305,8 @@ export default function AdminMaintenancePage() {
                 )}
                 
                 <button
-                  onClick={() => setSelectedItem(null)}
+                  aria-label="ปิดรายละเอียด"
+              onClick={() => setSelectedItem(null)}
                   className="flex-1 sm:flex-none inline-flex justify-center items-center px-5 py-2.5 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors border border-gray-300"
                 >
                   ปิดหน้าต่าง
@@ -311,7 +315,7 @@ export default function AdminMaintenancePage() {
 
             </div>
           </div>
-        </div>
+        </Modal>
       )}
       <ModalAlert
         open={alertOpen}

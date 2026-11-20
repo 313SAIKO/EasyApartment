@@ -16,6 +16,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AccessTokenGuard } from '../auth/guards/access-token.guard';
 import { UpdateAvatarDto } from './dto/avatar.url.dto';
 import { ResetTenantPasswordDto } from './dto/reset-tenant-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 interface JwtRequest extends Request {
   user: JwtPayload;
 }
@@ -23,6 +24,13 @@ interface JwtRequest extends Request {
 @Controller('users')
 export class UserController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Patch('me/profile')
+  @Roles('tenant', 'admin')
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  updateProfile(@Req() req: JwtRequest, @Body() dto: UpdateProfileDto) {
+    return this.usersService.updateProfile(req.user.sub, dto);
+  }
 
   //=========> create Account by admin for tenant
   @Post('admin/create-user')

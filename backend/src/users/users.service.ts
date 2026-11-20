@@ -208,4 +208,19 @@ export class UsersService {
     const user = await this.db.user.findUnique({ where: { id } });
     return user ? publicUser(user) : null;
   }
+
+  async updateProfile(
+    id: string,
+    profile: { fullName: string; phone: string },
+  ) {
+    return publicUser(
+      await this.db.user.update({
+        where: { id },
+        data: {
+          fullName: profile.fullName,
+          phone: profile.phone,
+        },
+      }),
+    );
+  }
 }

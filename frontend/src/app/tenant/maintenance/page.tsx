@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Upload, X, Wrench } from "lucide-react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { uiError } from "@/lib/ui-error";
 import ModalAlert from "@/components/ModalAlert";
 
 const priorities = ["high", "medium", "low"] as const;
 type Priority = (typeof priorities)[number];
 
 export default function MaintenancePage() {
+  const fileInput = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
@@ -22,6 +24,9 @@ export default function MaintenancePage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+        setAlertType("error"); setAlertMessage("กรุณาเลือกรูป JPG, PNG หรือ WEBP ขนาดไม่เกิน 5 MB"); setAlertOpen(true); e.target.value = ""; return;
+      }
       setImage(file);
 
       const reader = new FileReader();
@@ -33,12 +38,14 @@ export default function MaintenancePage() {
   };
 
   const removeImage = () => {
+    if (fileInput.current) fileInput.current.value = "";
     setImage(null);
     setImagePreview(null);
   };
 
   const handleSubmit = async () => {
-    if (!title || !description) {
+    if (loading) return;
+    if (!title.trim() || !description.trim()) {
       setAlertType("error");
       setAlertMessage("กรุณากรอกข้อมูลให้ครบถ้วนครับ");
       setAlertOpen(true);
@@ -76,7 +83,7 @@ export default function MaintenancePage() {
     } catch (error: any) {
       console.error("Maintenance error:", error);
       setAlertType("error");
-      setAlertMessage("เกิดข้อผิดพลาดในการส่งข้อมูล");
+      setAlertMessage(uiError(error, "ส่งคำร้องแจ้งซ่อมไม่สำเร็จ"));
       setAlertOpen(true);
     } finally {
       setLoading(false);
@@ -140,7 +147,7 @@ export default function MaintenancePage() {
               ระดับความสำคัญ
             </label>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {priorities.map((level) => (
                 <button
                   key={level}
@@ -171,8 +178,10 @@ export default function MaintenancePage() {
                   เลือกรูปภาพ
                 </p>
                 <input
+                  ref={fileInput}
+                  disabled={loading}
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
                   onChange={handleImageChange}
                   className="hidden"
                 />

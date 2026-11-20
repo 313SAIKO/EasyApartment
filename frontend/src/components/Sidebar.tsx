@@ -10,7 +10,7 @@ const items = [
   { href: '/admin', label: 'Dashboard', icon: Home },
   { href: '/admin/Contracts', label: 'Contracts', icon: Calendar },
   { href: '/admin/Invoices', label: 'Invoices', icon: FileText },
-  { href: '/admin/Register', label: 'sign a contrac', icon: UserPlus},
+  { href: '/admin/Register', label: 'ลงทะเบียนผู้เช่า', icon: UserPlus},
   { href: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
   { href: '/admin/billing', label: 'Billing', icon: CreditCard },
   { href: '/admin/reports', label: 'Reports', icon: BarChart2 },
@@ -24,13 +24,14 @@ interface SidebarProps {
 export default function Sidebar({ pathname }: SidebarProps) {
 
   return (
-    <aside className="w-60 bg-slate-900 text-slate-100 h-full flex flex-col p-6 shrink-0">
-      <div className="mb-8">
+    <aside className="w-full bg-slate-900 text-slate-100 flex flex-col p-3 lg:w-60 lg:h-full lg:p-6 shrink-0">
+      <div className="hidden lg:block mb-8">
         <div className="text-white text-2xl font-extrabold">EasyApartment</div>
         <div className="text-sm text-slate-400 mt-1">Admin</div>
       </div>
 
-      <nav className="flex-1 space-y-1">
+      <p className="mb-1 text-right text-xs text-slate-300 lg:hidden">เลื่อนเพื่อดูเมนูทั้งหมด →</p>
+      <nav aria-label="เมนูผู้ดูแล" className="flex gap-1 overflow-x-auto lg:flex-1 lg:block lg:space-y-1">
         {items.map((it) => {
           const Icon = it.icon
           
@@ -43,7 +44,8 @@ export default function Sidebar({ pathname }: SidebarProps) {
             <Link
               key={it.href}
               href={it.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 ${
+              aria-current={active ? "page" : undefined}
+              className={`flex shrink-0 items-center gap-3 px-3 py-3 rounded-md transition-all duration-200 ${
                 active 
                 ? 'bg-slate-800 border-l-4 border-blue-500 text-white' 
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -56,7 +58,7 @@ export default function Sidebar({ pathname }: SidebarProps) {
         })}
       </nav>
 
-      <div className="mt-6 text-xs text-slate-400">
+      <div className="hidden lg:block mt-6 text-xs text-slate-400">
         © 2026 EasyApartment
       </div>
     </aside>

@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import api from '@/lib/api'
 import { getProfile } from '@/lib/auth'
 import { Upload, Save, Trash2 } from 'lucide-react'
+import PageState from "@/components/PageState"
+import { uiError } from "@/lib/ui-error"
 import ModalAlert from "@/components/ModalAlert"
 
 export default function AdminProfilePage() {
@@ -32,16 +34,21 @@ export default function AdminProfilePage() {
   }, [])
 
   const previewUrl = React.useMemo(() => {
-    if (!file) return null
+    if (!file || uploading) return null
     return URL.createObjectURL(file)
   }, [file])
 
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+
   const onSelect = (f: File | null) => {
+    if (f && (!["image/jpeg", "image/png", "image/webp"].includes(f.type) || f.size > 5 * 1024 * 1024)) {
+      setAlertType("error"); setAlertMessage("กรุณาเลือกรูป JPG, PNG หรือ WEBP ขนาดไม่เกิน 5 MB"); setAlertOpen(true); return
+    }
     setFile(f)
   }
 
   const handleSave = async () => {
-    if (!file) return
+    if (!file || uploading) return
 
     try {
       setUploading(true)
@@ -65,7 +72,7 @@ export default function AdminProfilePage() {
     } catch (err) {
       console.error("Failed to upload avatar", err)
       setAlertType("error")
-      setAlertMessage("อัปโหลดรูปโปรไฟล์ไม่สำเร็จ")
+      setAlertMessage(uiError(err, "อัปโหลดรูปโปรไฟล์ไม่สำเร็จ"))
       setAlertOpen(true)
     } finally {
       setUploading(false)
@@ -73,6 +80,8 @@ export default function AdminProfilePage() {
   }
 
   const handleRemove = async () => {
+    if (uploading) return
+    setUploading(true)
     try {
       await api.delete("/upload/avatars")
 
@@ -89,21 +98,22 @@ export default function AdminProfilePage() {
     } catch (err) {
       console.error("Failed to remove avatar", err)
       setAlertType("error")
-      setAlertMessage("ลบรูปโปรไฟล์ไม่สำเร็จ")
+      setAlertMessage(uiError(err, "ลบรูปโปรไฟล์ไม่สำเร็จ"))
       setAlertOpen(true)
     }
 
     setFile(null)
+    setUploading(false)
   }
 
-  if (loading) return <div className="p-6">Loading...</div>
-  if (!user) return <div className="p-6 text-red-500">ไม่พบข้อมูลผู้ดูแลระบบ</div>;
+  if (loading) return <PageState message="กำลังโหลดข้อมูล..." />
+  if (!user) return <PageState message="โหลดข้อมูลผู้ดูแลระบบไม่สำเร็จ" error />;
 
   return (
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="mx-auto max-w-4xl">
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <div className="w-24 h-24 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center">
               {(user as any)?.profile?.avatar?.url ? (
                 <img src={(user as any).profile.avatar.url} alt="profile" className="w-full h-full object-cover" />
@@ -114,18 +124,19 @@ export default function AdminProfilePage() {
 
             <div>
               <h2 className="text-xl font-semibold">{(user as any)?.profile?.fullName ?? 'Admin'}</h2>
-              <p className="text-sm text-gray-500">{user?.email ?? 'Admin@gmail.com'}</p>
+              <p className="break-all text-sm text-gray-500">{user?.email ?? 'Admin@gmail.com'}</p>
             </div>
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="col-span-1 bg-gray-50 rounded-lg p-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Upload Profile Image</label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <input
                   id="file-input"
                   type="file"
-                  accept="image/*"
+                  disabled={uploading}
+                  accept="image/png,image/jpeg,image/webp"
                   onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
                   className="hidden"
                 />
@@ -157,7 +168,8 @@ export default function AdminProfilePage() {
               <span>Save</span>
             </button>
 
-            <button onClick={handleRemove} className="inline-flex items-center gap-2 bg-white border px-4 py-2 rounded-xl hover:shadow transition">
+            <button disabled={uploading || !user?.profile?.avatar?.url}
+              onClick={handleRemove} className="inline-flex items-center gap-2 bg-white border px-4 py-2 rounded-xl hover:shadow transition">
               <Trash2 size={16} />
               <span>Remove</span>
             </button>

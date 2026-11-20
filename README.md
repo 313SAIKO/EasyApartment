@@ -50,7 +50,11 @@ In `frontend`:
 
 ```sh
 npm run build -- --webpack
+npx playwright install chromium
+npm run test:ui
 ```
+
+The browser suite starts the built frontend on port 3101. It covers all 16 screen routes at desktop and mobile sizes, navigation, empty/error states, profile saving, contract edit/cancel, registration retry, billing, maintenance, recovery and CSV download. API responses are mocked in these UI tests; PostgreSQL behavior is checked separately by the backend integration verifier. Screenshots and failure traces are written to the ignored `frontend/test-results` directory. Set `NEXT_PUBLIC_API_URL` to an API URL ending in `/api/v1` before building.
 
 For production-style local startup, build the backend with `npm run build` then use `npm run start:prod`; start the built frontend with `npm start`.
 
@@ -69,6 +73,7 @@ If PostgreSQL cannot connect, check the service, database existence and `DATABAS
 - Reports (`/admin/reports`) filter invoices by billing month, show billed/confirmed/outstanding totals, and export CSV. Confirmed totals belong to the invoice period, not the month cash was received.
 - Forgotten passwords use administrator-assisted recovery: the tenant contacts the apartment administrator, who verifies their identity and uses **กู้บัญชีผู้เช่า** to generate a temporary password. The tenant can then change it under **บัญชีของฉัน**. There is no automated reset email service; administrator-account recovery is outside this demo workflow.
 - Removing an avatar clears the image from that user's profile. It does not delete the cloud asset; cloud ownership verification and asset cleanup are deferred with the upload security work. Cloudinary is still required for real uploads.
+- Tenant profile editing saves only the signed-in account’s name and phone; roles, email and other accounts cannot be changed through this endpoint. Registration keeps a newly created account available for retry if contract creation fails; retry in the same page and retain the temporary password before leaving.
 - Integration tests also cover immediate token revocation, tenant password recovery, bulk rollback, room-status conflicts, report totals/access, and avatar removal. Cloudinary remains mocked.
 
 ## Project origins and credits

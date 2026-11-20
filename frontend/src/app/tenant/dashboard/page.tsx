@@ -7,12 +7,16 @@ import { useAuth } from '@/context/AuthContext'
 import { useEffect, useState } from "react";
 import { getMyContract } from "@/services/contracts.service";
 import { invoiceService } from "@/services/invoice.service";
+import axios from "axios";
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
 import ModalAlert from "@/components/ModalAlert";
 
 export default function TenantDashboard() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
+  const [loadError, setLoadError] = useState("");
   const [roomNumber, setRoomNumber] = useState<string>("-");
   const [tenantName, setTenantName] = useState<string>("ผู้เช่า");
   const [latestBill, setLatestBill] = useState<number>(0);
@@ -34,7 +38,11 @@ export default function TenantDashboard() {
   useEffect(() => {
     async function fetchDashboardData() {
       try {
-        const contract = await getMyContract();
+        const [contract, invoiceResponse] = await Promise.all([
+          getMyContract().catch((error) => { if (axios.isAxiosError(error) && error.response?.status === 404) return null; throw error; }),
+          invoiceService.getMyInvoices(),
+        ]);
+        setTenantName(user?.profile?.fullName || user?.email || "ผู้เช่า");
 
         if (contract?.roomId?.roomNumber) {
           setRoomNumber(contract.roomId.roomNumber);
@@ -46,7 +54,7 @@ export default function TenantDashboard() {
           setTenantName(contract.tenantId.email);
         }
 
-        const invoiceResponse = await invoiceService.getMyInvoices();
+
         const invoices = Array.isArray(invoiceResponse) ? invoiceResponse : invoiceResponse?.data;
         if (invoices && Array.isArray(invoices) && invoices.length > 0) {
           const sorted = [...invoices].sort(
@@ -79,7 +87,7 @@ export default function TenantDashboard() {
           );
         }
       } catch (error) {
-        console.error("Dashboard fetch error:", error);
+        setLoadError(uiError(error, "โหลดภาพรวมไม่สำเร็จ"));
       } finally {
         setLoading(false);
       }
@@ -92,6 +100,9 @@ export default function TenantDashboard() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-blue-100 p-4 sm:p-8 pb-24 sm:pb-8">
       <div className="mx-auto max-w-6xl px-2 sm:px-0">
         
+        {loadError && <PageState error message={loadError} />}
+        {!loading && !loadError && roomNumber === "-" && <PageState message="ยังไม่มีสัญญาเช่าที่ใช้งาน กรุณาติดต่อผู้ดูแลเพื่อจัดทำสัญญา" />}
+        {!loading && !loadError && !latestInvoiceId && <PageState message="ยังไม่มีใบแจ้งหนี้ เมื่อผู้ดูแลออกบิลจะแสดงที่นี่" />}
         {/* HERO SECTION */}
         <div className="relative mb-10 overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-blue-600 p-6 sm:p-10 text-white shadow-2xl">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/20 blur-3xl"></div>
@@ -116,52 +127,6 @@ export default function TenantDashboard() {
           </div>
         </div>
 
-        {/* MOBILE TAB BAR */}
-        <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
-          <div className="mx-auto max-w-6xl px-2">
-            <nav className="rounded-t-2xl bg-white/90 backdrop-blur border-t px-3 py-2 flex justify-between items-center shadow-lg">
-              <Link
-                href="/tenant/dashboard"
-                className={`flex flex-col items-center text-sm ${
-                  pathname === "/tenant/dashboard" ? "text-indigo-600" : "text-gray-600"
-                }`}
-              >
-                <Home size={20} />
-                <span className="text-xs">หน้าแรก</span>
-              </Link>
-
-              <Link
-                href="/tenant/bills"
-                className={`flex flex-col items-center text-sm ${
-                  pathname?.startsWith("/tenant/bills") ? "text-indigo-600" : "text-gray-600"
-                }`}
-              >
-                <FileText size={20} />
-                <span className="text-xs">บิล</span>
-              </Link>
-
-              <Link
-                href="/tenant/maintenance"
-                className={`flex flex-col items-center text-sm ${
-                  pathname?.startsWith("/tenant/maintenance") ? "text-indigo-600" : "text-gray-600"
-                }`}
-              >
-                <Wrench size={20} />
-                <span className="text-xs">แจ้งซ่อม</span>
-              </Link>
-
-              <Link
-                href="/tenant/profile"
-                className={`flex flex-col items-center text-sm ${
-                  pathname?.startsWith("/tenant/profile") ? "text-indigo-600" : "text-gray-600"
-                }`}
-              >
-                <User size={20} />
-                <span className="text-xs">บัญชี</span>
-              </Link>
-            </nav>
-          </div>
-        </div>
         {/* MOBILE STATS (horizontal scroll) */}
         <div className="flex flex-col gap-3 pb-2 sm:hidden">
           <div className="w-full rounded-xl bg-white p-3 shadow-sm flex items-center justify-between">
@@ -244,10 +209,10 @@ export default function TenantDashboard() {
 
           <div className="mt-6 flex flex-col sm:flex-row sm:flex-wrap gap-4">
             <Link
-              href={latestInvoiceId ? `/tenant/bills/${latestInvoiceId}` : "#"}
+              href={latestInvoiceId ? `/tenant/bills/${latestInvoiceId}` : "/tenant/bills"}
               className="w-full sm:w-auto rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition hover:scale-105 hover:bg-indigo-700 text-center"
             >
-              ชำระเงินตอนนี้
+              {latestInvoiceId ? "ดูบิลล่าสุด" : "ดูใบแจ้งหนี้"}
             </Link>
 
             <Link
@@ -257,7 +222,7 @@ export default function TenantDashboard() {
               ดูประวัติ
             </Link>
 
-            <button className="w-full sm:w-auto rounded-xl bg-blue-100 px-6 py-3 font-semibold text-blue-600 transition hover:scale-105 hover:bg-blue-200 text-center">
+            <button onClick={() => { setAlertType("info"); setAlertMessage("ติดต่อผู้ดูแลที่สำนักงานอพาร์ตเมนต์ หากต้องการแจ้งปัญหาห้องพัก กรุณาใช้เมนูแจ้งซ่อม"); setAlertConfirmAction(undefined); setAlertOpen(true); }} className="w-full sm:w-auto rounded-xl bg-blue-100 px-6 py-3 font-semibold text-blue-600 transition hover:scale-105 hover:bg-blue-200 text-center">
               ติดต่อผู้ดูแลระบบ
             </button>
 

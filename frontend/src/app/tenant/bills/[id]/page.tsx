@@ -1,5 +1,8 @@
 "use client";
 
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+
 import { useEffect, useState } from "react";
 import { invoiceService } from "@/services/invoice.service";
 import { useParams, useRouter } from "next/navigation";
@@ -10,8 +13,10 @@ export default function BillDetailPage() {
   const params = useParams();
   const router = useRouter();
   const billId = params.id as string;
+  const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [bill, setBill] = useState<any>(null);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertType, setAlertType] = useState<"success" | "error" | "info">("info");
@@ -42,7 +47,8 @@ export default function BillDetailPage() {
         const data = await invoiceService.getInvoiceById(billId);
         setBill(data);
       } catch (err) {
-        console.error("Failed to fetch invoice:", err);
+        setLoadError(uiError(err));
+console.error("Failed to fetch invoice:", err);
       } finally {
         setLoading(false);
       }
@@ -52,6 +58,7 @@ export default function BillDetailPage() {
   }, [billId]);
 
   const handleUpload = async () => {
+    if (uploading) return;
     if (!file) {
       setAlertType("error");
       setAlertMessage("กรุณาเลือกไฟล์สลิปก่อนครับ");
@@ -59,6 +66,10 @@ export default function BillDetailPage() {
       return;
     }
 
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setAlertType("error"); setAlertMessage("กรุณาเลือกรูป JPG, PNG หรือ WEBP ขนาดไม่เกิน 5 MB"); setAlertOpen(true); return;
+    }
+    setUploading(true);
     try {
       await invoiceService.payInvoice(
         billId,
@@ -75,21 +86,23 @@ export default function BillDetailPage() {
     } catch (error) {
       console.error(error);
       setAlertType("error");
-      setAlertMessage("เกิดข้อผิดพลาดในการอัพโหลด");
+      setAlertMessage(uiError(error));
       setAlertOpen(true);
-    }
+    } finally { setUploading(false); }
   };
 
   return (
     <>
       {loading && <p className="text-center text-gray-500">กำลังโหลด...</p>}
-      {!loading && bill && (
+      {!loading && loadError && <PageState error message={loadError} />}
+      {!loading && !loadError && !bill && <PageState message="ไม่พบใบแจ้งหนี้" />}
+      {!loading && !loadError && bill && (
         <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-blue-100 p-4 sm:p-8 pb-24 sm:pb-8 flex justify-center items-start pt-6 sm:pt-10">
           <div className="w-full max-w-lg rounded-3xl bg-white/95 backdrop-blur-xl p-6 sm:p-8 shadow-2xl border border-white">
             
             {/* Header with Back Button */}
             <div className="flex items-center gap-3 mb-6">
-              <button onClick={() => router.back()} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 text-gray-700 transition">
+              <button aria-label="กลับหน้ารายการบิล" onClick={() => router.push("/tenant/bills")} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 text-gray-700 transition">
                 <ArrowLeft size={20} />
               </button>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800">รายละเอียดชำระเงิน</h1>
@@ -182,7 +195,7 @@ export default function BillDetailPage() {
                     <Upload size={16} /> แนบสลิปโอนเงิน
                   </h3>
                   <input
-                    type="file"
+                    type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading} aria-label="เลือกไฟล์สลิป"
                     className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
                     onChange={(e) => setFile(e.target.files?.[0] || null)}
                   />
@@ -194,7 +207,7 @@ export default function BillDetailPage() {
                 </div>
 
                 <button
-                  onClick={handleUpload}
+                  disabled={uploading || !file} onClick={handleUpload}
                   className="w-full rounded-2xl bg-indigo-600 p-4 text-white font-bold text-base hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 transition-all active:scale-95"
                 >
                   ยืนยันการชำระเงิน

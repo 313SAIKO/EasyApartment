@@ -1,8 +1,12 @@
 "use client"
 
+import PageState from "@/components/PageState";
+import { uiError } from "@/lib/ui-error";
+
 import React, { useEffect, useMemo, useState } from "react"
 import { Eye, Trash2, Search } from "lucide-react"
 import { invoiceService } from "@/services/invoice.service"
+import Modal from "@/components/Modal"
 import ModalAlert from "@/components/ModalAlert"
 
 interface Invoice {
@@ -33,9 +37,11 @@ interface Invoice {
 }
 
 export default function AdminInvoicesPage() {
+  const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState("")
 
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [alertOpen, setAlertOpen] = useState(false)
@@ -49,12 +55,9 @@ export default function AdminInvoicesPage() {
         const data = await invoiceService.getAllInvoices()
         const invoiceData = data.data || data
         setInvoices(invoiceData)
-        console.log("Invoices response:", invoiceData)
-        if (invoiceData?.length) {
-          console.log("First invoice tenant object:", invoiceData[0].tenantId)
-        }
       } catch (error) {
-        console.error("Failed to fetch invoices:", error)
+        setLoadError(uiError(error));
+console.error("Failed to fetch invoices:", error)
       } finally {
         setLoading(false)
       }
@@ -67,7 +70,7 @@ export default function AdminInvoicesPage() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv =>
       inv._id.toLowerCase().includes(search.toLowerCase()) ||
-      inv.tenantId?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      [inv.tenantId?.profile?.fullName, inv.tenantId?.name, inv.tenantId?.email].some(value => value?.toLowerCase().includes(search.toLowerCase())) ||
       inv.roomId?.roomNumber?.toLowerCase().includes(search.toLowerCase())
     )
   }, [search, invoices])
@@ -78,8 +81,7 @@ export default function AdminInvoicesPage() {
 
   const outstanding = invoices
     .filter(inv =>
-      inv.payment?.status === "pending" ||
-      inv.payment?.status === "rejected"
+      inv.payment?.status !== "paid"
     )
     .reduce((sum, inv) => sum + (inv.amounts?.grandTotal || 0), 0)
 
@@ -96,10 +98,7 @@ export default function AdminInvoicesPage() {
       } catch (error: any) {
         console.error("Failed to delete invoice:", error)
         setAlertType("error")
-        setAlertMessage(
-          error?.response?.data?.message ||
-          "ไม่สามารถลบบิลได้ กรุณาลองใหม่อีกครั้ง"
-        )
+        setAlertMessage(uiError(error, "ลบใบแจ้งหนี้ไม่สำเร็จ"))
         setAlertConfirmAction(undefined)
       }
     })
@@ -107,6 +106,8 @@ export default function AdminInvoicesPage() {
   }
 
   const handleConfirm = async (id: string, status: "paid" | "rejected") => {
+    if (saving) return false
+    setSaving(true)
     try {
       await invoiceService.confirmInvoice(id, status)
       setInvoices(prev =>
@@ -119,14 +120,17 @@ export default function AdminInvoicesPage() {
             : inv
         )
       )
+      return true
     } catch (error) {
-      console.error("Failed to confirm invoice:", error)
-    }
+      setAlertType("error"); setAlertMessage(uiError(error)); setAlertConfirmAction(undefined); setAlertOpen(true);
+      return false
+    } finally { setSaving(false) }
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 bg-gray-50 min-h-screen">
+    <div className="flex flex-col gap-6 p-2 sm:p-6 bg-gray-50 min-h-screen">
 
+      {loadError && <PageState error message={loadError} />}
       {/* Header */}
       <header className="bg-white border-b rounded-xl px-6 py-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-gray-800">
@@ -201,7 +205,7 @@ export default function AdminInvoicesPage() {
     {loading && (
       <tr>
         <td colSpan={7} className="text-center p-6 text-gray-400">
-          Loading invoices...
+          กำลังโหลดใบแจ้งหนี้...
         </td>
       </tr>
     )}
@@ -260,7 +264,7 @@ export default function AdminInvoicesPage() {
         {/* Action */}
         <td className="p-4 flex justify-center gap-3">
           <button
-            onClick={() => setSelectedInvoice(inv)}
+            aria-label="ดูรายละเอียดบิล" onClick={() => setSelectedInvoice(inv)}
             className="text-blue-600 hover:scale-110 transition"
           >
             <Eye size={18} />
@@ -269,6 +273,7 @@ export default function AdminInvoicesPage() {
           {inv.payment?.status === "paid_pending_review" && (
             <>
               <button
+                disabled={saving}
                 onClick={() => handleConfirm(inv._id, "paid")}
                 className="text-green-600 text-xs border border-green-600 px-2 py-1 rounded hover:bg-green-600 hover:text-white transition"
               >
@@ -276,6 +281,7 @@ export default function AdminInvoicesPage() {
               </button>
 
               <button
+                disabled={saving}
                 onClick={() => handleConfirm(inv._id, "rejected")}
                 className="text-red-600 text-xs border border-red-600 px-2 py-1 rounded hover:bg-red-600 hover:text-white transition"
               >
@@ -285,7 +291,7 @@ export default function AdminInvoicesPage() {
           )}
 
           <button
-            onClick={() => handleDelete(inv._id)}
+            aria-label="ลบบิล" disabled={inv.payment?.status !== "pending" || !!inv.payment?.slipUrl} onClick={() => handleDelete(inv._id)}
             className="text-red-600 hover:scale-110 transition"
           >
             <Trash2 size={18} />
@@ -295,10 +301,10 @@ export default function AdminInvoicesPage() {
       </tr>
     ))}
 
-    {!loading && filteredInvoices.length === 0 && (
+    {!loading && !loadError && filteredInvoices.length === 0 && (
       <tr>
         <td colSpan={7} className="text-center p-6 text-gray-400">
-          No invoices found
+          ไม่พบใบแจ้งหนี้
         </td>
       </tr>
     )}
@@ -309,14 +315,14 @@ export default function AdminInvoicesPage() {
 
     {/* Invoice Detail Modal */}
     {selectedInvoice && (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-        <div className="bg-white w-full max-w-lg rounded-2xl p-6 shadow-xl relative">
+      <Modal panelClassName="max-w-2xl p-0" isOpen={!!selectedInvoice} onClose={() => { if (!saving) setSelectedInvoice(null) }}>
+        <div className="bg-white w-full rounded-2xl p-5 shadow-xl relative">
           
           <h2 className="text-xl font-semibold mb-4">
             Invoice Detail
           </h2>
 
-          <div className="space-y-2 text-sm">
+          <div className="space-y-2 break-words text-sm">
             <p><strong>Invoice ID:</strong> {selectedInvoice._id}</p>
             <p><strong>Tenant:</strong> 
               {selectedInvoice.tenantId?.profile?.fullName ||
@@ -344,9 +350,9 @@ export default function AdminInvoicesPage() {
           {selectedInvoice.payment?.status === "paid_pending_review" && (
             <div className="flex gap-3 mt-6">
               <button
+                disabled={saving}
                 onClick={async () => {
-                  await handleConfirm(selectedInvoice._id, "paid")
-                  setSelectedInvoice(null)
+                  if (await handleConfirm(selectedInvoice._id, "paid")) setSelectedInvoice(null)
                 }}
                 className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition"
               >
@@ -354,9 +360,9 @@ export default function AdminInvoicesPage() {
               </button>
 
               <button
+                disabled={saving}
                 onClick={async () => {
-                  await handleConfirm(selectedInvoice._id, "rejected")
-                  setSelectedInvoice(null)
+                  if (await handleConfirm(selectedInvoice._id, "rejected")) setSelectedInvoice(null)
                 }}
                 className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition"
               >
@@ -365,15 +371,10 @@ export default function AdminInvoicesPage() {
             </div>
           )}
 
-          <button
-            onClick={() => setSelectedInvoice(null)}
-            className="absolute top-3 right-4 text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
+
 
         </div>
-      </div>
+      </Modal>
     )}
 
       <ModalAlert

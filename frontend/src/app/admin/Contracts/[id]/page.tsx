@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Pencil, Trash2, Save, FileText, User, DoorOpen, CalendarDays, Banknote, ArrowLeft, X } from "lucide-react"
+import PageState from "@/components/PageState"
+import { uiError } from "@/lib/ui-error"
 import ModalAlert from "@/components/ModalAlert"
 
 // ✅ import service functions
@@ -16,6 +18,9 @@ export default function ContractDetailPage() {
   const { id } = useParams()
   const router = useRouter()
 
+  const [savedContract, setSavedContract] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [loadError, setLoadError] = useState("")
   const [contract, setContract] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -31,8 +36,10 @@ export default function ContractDetailPage() {
         if (!id) return
         const data = await getContractById(id as string)
         setContract(data)
+        setSavedContract(data)
+        setIsEditing(new URLSearchParams(window.location.search).get("edit") === "true")
       } catch (err) {
-        console.error("Failed to load contract", err)
+        setLoadError(uiError(err, "โหลดสัญญาไม่สำเร็จ"))
       } finally {
         setLoading(false)
       }
@@ -59,8 +66,10 @@ export default function ContractDetailPage() {
   }
 
   const handleUpdate = async () => {
+    if (saving) return
+    setSaving(true)
     try {
-      await updateContract(id as string, {
+      const updated = await updateContract(id as string, {
         startDate: contract.startDate,
         endDate: contract.endDate,
         status: contract.status,
@@ -70,6 +79,9 @@ export default function ContractDetailPage() {
         },
       })
 
+      setContract(updated)
+      setSavedContract(updated)
+      setIsEditing(false)
       setModalType("success")
       setModalMessage("อัปเดตสัญญาสำเร็จ")
       setConfirmAction(null)
@@ -77,36 +89,27 @@ export default function ContractDetailPage() {
     } catch (err: any) {
       console.error("Update error:", err)
 
-      const backendMessage =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "เกิดข้อผิดพลาดในการอัปเดต"
-
-      const message = Array.isArray(backendMessage)
-        ? backendMessage.join("\n")
-        : backendMessage
-
       setModalType("error")
-      setModalMessage("อัปเดตไม่สำเร็จ:\n" + message)
+      setModalMessage(uiError(err, "อัปเดตสัญญาไม่สำเร็จ"))
       setConfirmAction(null)
       setModalOpen(true)
-    }
+    } finally { setSaving(false) }
   }
 
   const handleDelete = async () => {
     setModalType("info")
-    setModalMessage("คุณแน่ใจหรือไม่ว่าต้องการลบสัญญานี้?")
+    setModalMessage("คุณแน่ใจหรือไม่ว่าต้องการยกเลิกสัญญานี้?")
     setConfirmAction(() => async () => {
       try {
         await deleteContract(id as string)
         setModalType("success")
-        setModalMessage("ลบสัญญาสำเร็จ")
+        setModalMessage("ยกเลิกสัญญาสำเร็จ")
         setConfirmAction(null)
         setModalOpen(true)
-        router.push("/admin/contracts")
+        router.push("/admin/Contracts")
       } catch (err) {
         setModalType("error")
-        setModalMessage("เกิดข้อผิดพลาดในการลบ")
+        setModalMessage(uiError(err, "ยกเลิกสัญญาไม่สำเร็จ"))
         setConfirmAction(null)
         setModalOpen(true)
       }
@@ -140,6 +143,8 @@ export default function ContractDetailPage() {
       </div>
     )
 
+  if (loadError) return <PageState message={loadError} error />
+
   if (!contract)
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500">
@@ -157,7 +162,7 @@ export default function ContractDetailPage() {
 
       {/* ─── Top Header Bar ─── */}
       <div className="bg-white border-b border-slate-200 sticky ">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
 
           <div className="flex items-center gap-4">
             <button
@@ -172,7 +177,7 @@ export default function ContractDetailPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide ${currentStatus.classes}`}>
               {currentStatus.label}
             </span>
@@ -187,12 +192,14 @@ export default function ContractDetailPage() {
             ) : (
               <>
                 <button
-                  onClick={() => setIsEditing(false)}
+                  disabled={saving}
+                  onClick={() => { setContract(savedContract); setIsEditing(false) }}
                   className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
                 >
                   <X size={14} /> ยกเลิก
                 </button>
                 <button
+                  disabled={saving}
                   onClick={handleUpdate}
                   className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm"
                 >
@@ -202,10 +209,11 @@ export default function ContractDetailPage() {
             )}
 
             <button
+              disabled={saving || contract.status === "cancelled"}
               onClick={handleDelete}
               className="flex items-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold px-4 py-2 rounded-lg text-sm transition-colors border border-rose-200"
             >
-              <Trash2 size={14} /> ลบ
+              <Trash2 size={14} /> ยกเลิกสัญญา
             </button>
           </div>
         </div>
@@ -274,7 +282,7 @@ export default function ContractDetailPage() {
                 type="date"
                 name="startDate"
                 value={contract.startDate?.split("T")[0] || ""}
-                disabled={!isEditing}
+                disabled={!isEditing || saving}
                 onChange={handleChange}
                 className={inputClass(isEditing)}
               />
@@ -289,7 +297,7 @@ export default function ContractDetailPage() {
                 type="date"
                 name="endDate"
                 value={contract.endDate?.split("T")[0] || ""}
-                disabled={!isEditing}
+                disabled={!isEditing || saving}
                 onChange={handleChange}
                 className={inputClass(isEditing)}
               />
@@ -306,7 +314,7 @@ export default function ContractDetailPage() {
                   type="number"
                   name="deposit"
                   value={contract.financials?.deposit ?? 0}
-                  disabled={!isEditing}
+                  disabled={!isEditing || saving}
                   onChange={handleChange}
                   className={`${inputClass(isEditing)} pl-7`}
                 />
@@ -321,7 +329,7 @@ export default function ContractDetailPage() {
               <select
                 name="status"
                 value={contract.status}
-                disabled={!isEditing}
+                disabled={!isEditing || saving}
                 onChange={handleChange}
                 className={inputClass(isEditing)}
               >
@@ -336,13 +344,15 @@ export default function ContractDetailPage() {
           {isEditing && (
             <div className="mt-5 pt-5 border-t border-slate-100 flex justify-end gap-3">
               <button
-                onClick={() => setIsEditing(false)}
+                disabled={saving}
+                  onClick={() => { setContract(savedContract); setIsEditing(false) }}
                 className="px-5 py-2.5 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={handleUpdate}
+                disabled={saving}
+                  onClick={handleUpdate}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors shadow-sm"
               >
                 <Save size={14} /> บันทึกการเปลี่ยนแปลง
@@ -420,7 +430,7 @@ function InfoField({
       <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
       <p
         className={[
-          "text-sm",
+          "text-sm break-words min-w-0",
           mono ? "font-mono text-slate-600 text-xs bg-slate-100 px-2 py-1 rounded-md inline-block" : "",
           highlight ? "text-lg font-bold text-slate-800" : "text-slate-700 font-medium",
           !value ? "text-slate-400 italic" : "",

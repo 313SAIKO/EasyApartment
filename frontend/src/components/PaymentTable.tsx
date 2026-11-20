@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import PageState from "./PageState"
+import { uiError } from "@/lib/ui-error"
 import Modal from "./Modal"
 import { Image as ImageIcon, Check, X, Eye, ExternalLink, Loader2 } from "lucide-react"
 import { invoiceService } from "@/services/invoice.service"
@@ -29,12 +31,15 @@ type Invoice = {
 
 
 export default function PaymentTable() {
+  const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchInvoices = async () => {
     try {
+      setError("")
       setLoading(true)
       const response = await invoiceService.getAllInvoices()
       const invoiceData = response?.data || response || []
@@ -46,7 +51,7 @@ export default function PaymentTable() {
         
       setInvoices(filtered)
     } catch (error) {
-      console.error("Fetch Error:", error)
+      setError(uiError(error))
     } finally {
       setLoading(false)
     }
@@ -56,6 +61,8 @@ export default function PaymentTable() {
 
   // เปลี่ยนส่วนนี้
   const handleConfirm = async (id: string, status: "paid" | "rejected") => {
+    if (saving) return
+    setSaving(true)
     try {
       // 1. ยิง API บอกหลังบ้านให้เปลี่ยนสถานะ
       await invoiceService.confirmInvoice(id, status)
@@ -65,21 +72,22 @@ export default function PaymentTable() {
       
     } catch (error) {
       console.error("Update Error:", error)
-      alert("Error updating status")
-    }
+      setError(uiError(error))
+    } finally { setSaving(false) }
   }
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-8">
+    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-3 sm:p-8">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-black italic uppercase tracking-tighter text-slate-800">
           รายการชำระเงิน <span className="text-blue-500">({invoices.length})</span>
         </h2>
       </div>
 
+      {error && <PageState error message={error} retry={fetchInvoices} />}
       {loading ? (
         <div className="py-20 text-center flex flex-col items-center gap-3"><Loader2 className="animate-spin text-blue-500" /></div>
-      ) : invoices.length === 0 ? (
+      ) : error ? null : invoices.length === 0 ? (
         <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-[2rem] text-slate-400 font-bold uppercase italic text-xs">ไม่มีรายการรอตรวจสอบ</div>
       ) : (
         /* ✅ แก้ไข Scrollbar: ใช้ max-h และ custom-scrollbar */
@@ -127,6 +135,7 @@ export default function PaymentTable() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button
+                          disabled={saving}
                           onClick={() => handleConfirm(inv._id, "paid")}
                           className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-[9px] font-black uppercase italic bg-emerald-500 text-white hover:bg-emerald-600 transition-all active:scale-95"
                         >
@@ -134,6 +143,7 @@ export default function PaymentTable() {
                         </button>
 
                         <button
+                          disabled={saving}
                           onClick={() => handleConfirm(inv._id, "rejected")}
                           className="inline-flex items-center gap-1 px-2 py-1.5 rounded-xl text-[9px] font-black uppercase italic bg-rose-500 text-white hover:bg-rose-600 transition-all active:scale-95"
                         >

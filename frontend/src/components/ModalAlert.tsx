@@ -9,7 +9,7 @@ type ModalProps = {
   onClose: () => void;
   autoClose?: boolean;
   duration?: number;
-  onConfirm?: () => void;
+  onConfirm?: () => void | Promise<void>;
 };
 
 export default function ModalAlert({
@@ -22,16 +22,21 @@ export default function ModalAlert({
   autoClose = false,
   duration = 2000,
 }: ModalProps) {
+  const [busy, setBusy] = React.useState(false);
+  const pending = React.useRef(false);
+  const dialog = React.useRef<HTMLDialogElement>(null);
   React.useEffect(() => {
-    if (autoClose && open) {
+    if (open && !dialog.current?.open) dialog.current?.showModal();
+    if (!open) dialog.current?.close();
+  }, [open]);
+  React.useEffect(() => {
+    if (autoClose && open && !busy) {
       const timer = setTimeout(() => {
         onClose();
       }, duration);
       return () => clearTimeout(timer);
     }
-  }, [autoClose, open, duration, onClose]);
-
-  if (!open) return null;
+  }, [autoClose, open, duration, onClose, busy]);
 
   const icon = type === "success" ? "✅" : type === "error" ? "❌" : "ℹ️";
 
@@ -68,7 +73,15 @@ export default function ModalAlert({
         : "from-blue-400 to-sky-500";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+    <dialog
+      ref={dialog}
+      aria-label={title || "แจ้งเตือน"}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!pending.current) onClose();
+      }}
+      className="m-auto w-[calc(100%_-_2rem)] max-w-sm max-h-[90dvh] overflow-y-auto rounded-2xl bg-transparent p-0 backdrop:bg-black/50"
+    >
       {/* Card */}
       <div className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* Top accent bar */}
@@ -93,19 +106,33 @@ export default function ModalAlert({
           </h2>
 
           {/* Message */}
-          <p className="mb-6 text-sm leading-relaxed text-gray-500">{message}</p>
+          <p className="mb-6 whitespace-pre-line break-words text-sm leading-relaxed text-gray-500">
+            {message}
+          </p>
 
           {/* Buttons */}
           <div className="flex flex-col gap-2.5">
             {onConfirm && (
               <button
-                onClick={onConfirm}
+                disabled={busy}
+                onClick={async () => {
+                  if (pending.current || !onConfirm) return;
+                  pending.current = true;
+                  setBusy(true);
+                  try {
+                    await onConfirm();
+                  } finally {
+                    pending.current = false;
+                    setBusy(false);
+                  }
+                }}
                 className={`w-full rounded-xl py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-150 active:scale-95 ${confirmBtn}`}
               >
-                ยืนยัน
+                {busy ? "กำลังดำเนินการ..." : "ยืนยัน"}
               </button>
             )}
             <button
+              disabled={busy}
               onClick={onClose}
               className={`w-full rounded-xl py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-150 active:scale-95 ${closeBtn}`}
             >
@@ -114,6 +141,6 @@ export default function ModalAlert({
           </div>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
