@@ -2,7 +2,11 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  workers: 3,
+  forbidOnly: !!process.env.CI,
+  workers: process.env.CI ? 1 : 3,
+  reporter: process.env.CI
+    ? [["list"], ["html", { open: "never" }]]
+    : "list",
   timeout: 30000,
   use: {
     baseURL: "http://127.0.0.1:3101",

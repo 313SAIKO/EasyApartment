@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend / build and PostgreSQL tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # This database exists only inside the disposable CI service below.
+      DATABASE_URL: postgresql://postgres@localhost:5432/easyapartment_dev
+      JWT_ACCESS_EXPIRATION: '900'
+      JWT_REFRESH_EXPIRATION: '604800'
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: easyapartment_dev
+          POSTGRES_USER: postgres
+          # No real credentials are needed for this isolated test container.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d easyapartment_dev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Generate disposable JWT secrets
+        run: |
+          node -e 'const fs = require("node:fs"); const { randomBytes } = require("node:crypto"); for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"]) fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${randomBytes(48).toString("base64url")}\n`);'
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Apply migrations to fresh PostgreSQL database
+        run: npm run db:migrate
+      - name: Unit and API access-control tests
+        run: npm test -- --runInBand
+      - name: Build and run PostgreSQL integration tests
+        run: npm run test:e2e
+
+  frontend:
+    name: Frontend / build and desktop-mobile tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Build frontend
+        run: npm run build -- --webpack
+      - name: Test desktop and mobile workflows
+        run: npm run test:ui
+      - name: Upload browser test report and failure traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-test-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

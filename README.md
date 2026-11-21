@@ -1,5 +1,7 @@
 # EasyApartment
 
+[![CI](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml/badge.svg)](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml)
+
 Apartment management application built with NestJS, Next.js 16, PostgreSQL and Prisma. Features include admin/tenant authentication, rooms, rental contracts, monthly invoices, payment review, maintenance and an admin dashboard.
 
 ## Local setup
@@ -34,6 +36,13 @@ The seed only runs against `easyapartment_dev`. It creates:
 All three accounts initially use `SEED_PASSWORD` from `backend/.env`. Re-running the seed preserves existing records and passwords. Demo data is not intended for production.
 
 ## Verification
+
+GitHub Actions runs [CI](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml) on every push and pull request, and can also be started manually from the Actions tab. Two jobs run on Ubuntu with Node.js 24:
+
+- **Backend:** installs locked dependencies, generates Prisma, applies migrations to a fresh PostgreSQL 18 service, runs unit/access-control tests, builds NestJS and tests real persisted workflows. Test JWT secrets are generated for each run; no repository secrets or local `.env` files are required.
+- **Frontend:** builds Next.js and runs Chromium tests at desktop and mobile sizes. UI tests mock API responses; Cloudinary is mocked in backend integration tests. Browser reports, screenshots and failure traces are available under the run's artifacts for seven days.
+
+The PostgreSQL service is disposable and bound to runner loopback. It contains only test fixtures and is removed after the job. A failed build or test makes its CI job fail; the badge above shows the workflow status.
 
 In `backend`:
 
