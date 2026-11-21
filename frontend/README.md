@@ -1,40 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# EasyApartment Frontend
 
-## Getting Started
+หน้าเว็บสำหรับผู้ดูแลและผู้เช่า ใช้ Next.js App Router, React, TypeScript และ Tailwind CSS
 
-First, run the development server:
+[กลับหน้าหลัก](../README.md) · [คู่มือ Backend](../backend/README.md)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ติดตั้งและรัน
+
+ใช้ Node.js 24 และเปิด Backend ตาม [คู่มือ Backend](../backend/README.md) ก่อน
+
+รันจากโฟลเดอร์ repository:
+
+```sh
+cd frontend
+npm ci
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+คัดลอก `.env.example` เป็น `.env` โดยตั้งค่า API URL ให้รวม `/api/v1`:
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+```
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+ตัวแปร `NEXT_PUBLIC_*` ถูกส่งไปยังเบราว์เซอร์ ใช้สำหรับ API URL เท่านั้น ห้ามใส่รหัสผ่านฐานข้อมูลหรือ secret
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+เปิด Frontend ด้วย:
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```sh
+npm run dev
+```
 
-## Learn More
+เข้า [http://localhost:3001](http://localhost:3001) แล้วใช้ [บัญชีสาธิต](../README.md#local-setup) ที่สร้างจาก Backend seed
 
-To learn more about Next.js, take a look at the following resources:
+<a id="testing"></a>
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+## การทดสอบ
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+รันจากโฟลเดอร์ `frontend` หลังตั้งค่า API URL:
 
-## Deploy on Vercel
+```sh
+npm run build -- --webpack
+npx playwright install chromium
+npm run test:ui
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Playwright เปิด Frontend ที่ build แล้วบนพอร์ต **3101** โดยอัตโนมัติ ครอบคลุม 16 หน้าทั้งขนาดคอมพิวเตอร์และมือถือ รวมถึงเมนู ฟอร์ม สถานะไม่มีข้อมูล ข้อผิดพลาด การลองใหม่ และการป้องกันกดส่งซ้ำ
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+ชุดทดสอบนี้ใช้ **API จำลอง** และไม่ต้องเปิด Backend ตรวจการบันทึกลงฐานข้อมูลจริงด้วย [Backend integration tests](../backend/README.md#testing)
+
+ภาพหน้าจอและ trace เมื่อทดสอบไม่ผ่านอยู่ใน `test-results/` ซึ่งไม่ถูก commit บน GitHub Actions จะมี HTML report และไฟล์ผลทดสอบให้ดาวน์โหลดเป็น artifact เป็นเวลา 7 วัน
+
+## Build และเปิดแบบไม่ใช้ dev server
+
+```sh
+npm run build -- --webpack
+npm start
+```
+
+เปิดที่ `http://localhost:3001` เช่นเดิม หากเปลี่ยน `NEXT_PUBLIC_API_URL` ให้ build ใหม่ก่อนเปิด

@@ -2,89 +2,85 @@
 
 [![CI](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml/badge.svg)](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml)
 
-Apartment management application built with NestJS, Next.js 16, PostgreSQL and Prisma. Features include admin/tenant authentication, rooms, rental contracts, monthly invoices, payment review, maintenance and an admin dashboard.
+เว็บแอปจัดการอพาร์ตเมนต์ ตั้งแต่ห้องพักและสัญญาเช่า ไปจนถึงออกบิล ตรวจสลิป และรับเรื่องแจ้งซ่อม มีหน้าสำหรับผู้ดูแลและผู้เช่า รองรับการใช้งานบนคอมพิวเตอร์และมือถือ
 
-## Local setup
+โปรเจกต์นี้เริ่มจากงานกลุ่มระหว่างเรียน และนำมาพัฒนาต่อด้วยตนเองโดยได้รับความยินยอมจากทีม เพื่อฝึกพัฒนา Full Stack และใช้เป็นผลงานสมัครฝึกงาน
 
-Requirements: Node.js 22.12+ (tested with Node 24), npm and PostgreSQL (tested with PostgreSQL 18).
+[วิธีรัน Backend](backend/README.md) · [วิธีรัน Frontend](frontend/README.md) · [ผลทดสอบบน GitHub](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml)
 
-1. Create an empty PostgreSQL database named `easyapartment_dev` using your PostgreSQL administrator account.
-2. In `backend`, run `npm ci` and copy `.env.example` to `.env`. Set `DATABASE_URL`, two different random JWT secrets and a `SEED_PASSWORD` of at least 12 characters. Cloudinary credentials are needed for actual image uploads.
-3. Run these commands in `backend`:
+## ระบบทำอะไรได้บ้าง
 
-```sh
-npm run db:generate
-npm run db:migrate
-npm run db:seed
-npm run start:dev
-```
+| ผู้ใช้งาน | ฟีเจอร์หลัก |
+| --- | --- |
+| ผู้ดูแล | ดูภาพรวมห้องพัก ลงทะเบียนผู้เช่า จัดการสัญญา ออกบิลค่าน้ำ–ค่าไฟ ตรวจสลิป จัดการแจ้งซ่อม และส่งออกรายงาน CSV |
+| ผู้เช่า | ดูสัญญาและบิลของตนเอง ส่งสลิป แจ้งซ่อม แก้ไขข้อมูลส่วนตัว และเปลี่ยนรหัสผ่าน |
 
-4. In a second terminal, enter `frontend`, run `npm ci`, copy `.env.example` to `.env`, then run `npm run dev`.
-5. Open http://localhost:3001. The API is http://localhost:3000/api/v1.
+## สิ่งที่พัฒนาต่อจากงานเดิม
 
-The frontend uses `NEXT_PUBLIC_API_URL`, including `/api/v1`. Local CORS allows `http://localhost:3001`. Keep all actual environment files untracked. Never put database or JWT secrets in frontend environment variables.
+- เปลี่ยนฐานข้อมูลจาก MongoDB เป็น **PostgreSQL + Prisma** พร้อม migrations และข้อมูลสาธิต
+- ปรับสิทธิ์ Backend ให้ตรวจบทบาทและเจ้าของข้อมูล ผู้เช่าเข้าถึงได้เฉพาะข้อมูลของตนเอง
+- ปรับระบบ session ให้ logout และเปลี่ยนรหัสผ่านแล้วเพิกถอน token เดิม รวมถึงหมุน refresh token
+- ดูแลความสอดคล้องของห้อง สัญญา และบิล เช่น ป้องกันสัญญาใช้งานซ้อนกัน และคืนเลขมิเตอร์เมื่อลบบิลล่าสุด
+- แก้ปุ่มและเมนู ปรับหน้าจอมือถือ เพิ่มสถานะไม่มีข้อมูล ข้อความผิดพลาด และการลองใหม่
+- เพิ่ม automated tests และ **GitHub Actions** ให้ build และทดสอบเมื่อ push หรือเปิด Pull Request
 
-## Demo data
+## เทคโนโลยี
 
-The seed only runs against `easyapartment_dev`. It creates:
+| ส่วน | เครื่องมือ |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| Backend | NestJS, TypeScript, JWT, Argon2 |
+| ฐานข้อมูล | PostgreSQL 18, Prisma |
+| รูปภาพ | Cloudinary |
+| ทดสอบและ CI | Jest, Supertest, Playwright, GitHub Actions |
 
-- `admin@example.test`: administrator.
-- `tenant1@example.test`: tenant of room DEMO-101, with a contract, November 2026 invoice and maintenance request.
-- `tenant2@example.test`: tenant without a contract, useful for testing access restrictions.
-- DEMO-102: available room.
+<a id="local-setup"></a>
 
-All three accounts initially use `SEED_PASSWORD` from `backend/.env`. Re-running the seed preserves existing records and passwords. Demo data is not intended for production.
+## เริ่มใช้งานในเครื่อง
 
-## Verification
+เตรียม **Node.js 24**, npm และ **PostgreSQL 18** แล้วทำตามลำดับนี้:
 
-GitHub Actions runs [CI](https://github.com/313SAIKO/EasyApartment/actions/workflows/ci.yml) on every push and pull request, and can also be started manually from the Actions tab. Two jobs run on Ubuntu with Node.js 24:
+1. สร้างฐานข้อมูลว่างชื่อ `easyapartment_dev`
+2. ทำตาม [คู่มือ Backend](backend/README.md) เพื่อตั้งค่า `.env`, ใช้ migrations, สร้างข้อมูลสาธิต และเปิด API
+3. ทำตาม [คู่มือ Frontend](frontend/README.md) เพื่อตั้งค่า API URL และเปิดหน้าเว็บ
+4. เปิด [http://localhost:3001](http://localhost:3001)
 
-- **Backend:** installs locked dependencies, generates Prisma, applies migrations to a fresh PostgreSQL 18 service, runs unit/access-control tests, builds NestJS and tests real persisted workflows. Test JWT secrets are generated for each run; no repository secrets or local `.env` files are required.
-- **Frontend:** builds Next.js and runs Chromium tests at desktop and mobile sizes. UI tests mock API responses; Cloudinary is mocked in backend integration tests. Browser reports, screenshots and failure traces are available under the run's artifacts for seven days.
+บัญชีสาธิตใช้รหัสผ่านเริ่มต้นจาก `SEED_PASSWORD` ที่ตั้งไว้ใน `backend/.env`:
 
-The PostgreSQL service is disposable and bound to runner loopback. It contains only test fixtures and is removed after the job. A failed build or test makes its CI job fail; the badge above shows the workflow status.
+| บัญชี | ใช้ทดลอง |
+| --- | --- |
+| `admin@example.test` | หน้าผู้ดูแล |
+| `tenant1@example.test` | ผู้เช่าห้อง DEMO-101 พร้อมสัญญา บิลเดือนพฤศจิกายน 2026 และรายการแจ้งซ่อม |
+| `tenant2@example.test` | ผู้เช่าที่ยังไม่มีสัญญา |
 
-In `backend`:
+มีห้องว่าง **DEMO-102** สำหรับทดลองลงทะเบียนผู้เช่า การ seed ซ้ำจะเก็บข้อมูลและรหัสผ่านเดิมไว้
 
-```sh
-npm run db:generate
-npm run db:migrate
-npm test -- --runInBand
-npm run test:integration
-```
+## ลองสาธิตตามลำดับนี้
 
-The integration verifier starts the real application against `easyapartment_dev`, creates unique fixtures and removes only those fixtures. It checks registration, login, refresh rotation and concurrent replay rejection, logout, role/tenant isolation, rooms, contracts, invoices, duplicate rollback, meter restoration, maintenance and dashboard APIs. Cloudinary uploads and the rate limiter are replaced in this integration test; it does not prove external image storage works. Unit/API guard tests use database mocks.
+1. เข้าบัญชีผู้ดูแล ดูภาพรวมห้อง และเปิดรายละเอียดห้อง
+2. ลงทะเบียนผู้เช่าในห้องว่าง พร้อมสร้างสัญญาและรับรหัสผ่านชั่วคราว
+3. ออกบิลโดยกรอกเลขมิเตอร์ล่าสุด แล้วเข้าบัญชีผู้เช่าเพื่อดูบิล
+4. ส่งสลิปจากบัญชีผู้เช่า แล้วกลับมาบัญชีผู้ดูแลเพื่อตรวจสอบ **ขั้นตอนอัปโหลดต้องตั้งค่า Cloudinary**
+5. ทดลองแจ้งซ่อม อัปเดตสถานะงาน และดาวน์โหลดรายงาน CSV
 
-In `frontend`:
+## การตรวจคุณภาพ
 
-```sh
-npm run build -- --webpack
-npx playwright install chromium
-npm run test:ui
-```
+CI รันบน Ubuntu และ Node.js 24 แยกเป็นสองงาน:
 
-The browser suite starts the built frontend on port 3101. It covers all 16 screen routes at desktop and mobile sizes, navigation, empty/error states, profile saving, contract edit/cancel, registration retry, billing, maintenance, recovery and CSV download. API responses are mocked in these UI tests; PostgreSQL behavior is checked separately by the backend integration verifier. Screenshots and failure traces are written to the ignored `frontend/test-results` directory. Set `NEXT_PUBLIC_API_URL` to an API URL ending in `/api/v1` before building.
+- **Backend:** build, unit tests, ตรวจสิทธิ์ API และ integration tests กับ PostgreSQL 18 ที่สร้างใหม่ในแต่ละรอบ
+- **Frontend:** build และทดสอบหน้าเว็บด้วย Chromium ทั้งขนาดคอมพิวเตอร์และมือถือ พร้อมรายงานและภาพหน้าจอ
 
-For production-style local startup, build the backend with `npm run build` then use `npm run start:prod`; start the built frontend with `npm start`.
+ดูสถานะได้จาก badge ด้านบน และดูคำสั่งทดสอบใน [Backend](backend/README.md#testing) / [Frontend](frontend/README.md#testing)
 
-## Database behavior
+UI tests ใช้ API จำลอง ส่วน integration tests ใช้ PostgreSQL จริง โดยจำลอง Cloudinary และ rate limiter จึงยังไม่ยืนยันการอัปโหลดกับบริการ Cloudinary จริง
 
-Prisma schema and committed SQL migrations live in `backend/prisma`. This version starts with fresh PostgreSQL data; it does not import old MongoDB records. API responses retain `_id` and nested room/tenant fields for frontend compatibility, but identifiers are UUIDs.
+## ขอบเขตของเวอร์ชันสาธิต
 
-Contracts enforce one active contract per room. Deleting a contract cancels it and retains history. A contract with invoices cannot be reassigned to another room or tenant. Invoice totals use decimal arithmetic, water at 10 and electricity at 8 per unit. Only the latest unpaid invoice without payment evidence can be deleted; its meter readings are restored transactionally. Reviewed or submitted payments remain in history.
+- ใช้ข้อมูลทดสอบในฐานข้อมูลใหม่ ไม่ย้ายข้อมูล MongoDB เดิม
+- การชำระเงินเป็นการส่งสลิปให้ผู้ดูแลตรวจสอบ ยังไม่เชื่อม payment gateway
+- การลืมรหัสผ่านใช้ผู้ดูแลตรวจสอบตัวตนและสร้างรหัสผ่านชั่วคราว ยังไม่มีอีเมลรีเซ็ตอัตโนมัติ
+- การลบ avatar เอารูปออกจากโปรไฟล์ ส่วนการตรวจเจ้าของไฟล์บน Cloudinary และล้างไฟล์เก่ายังเป็นงานต่อยอด
 
-If PostgreSQL cannot connect, check the service, database existence and `DATABASE_URL`. Apply migrations before starting the API. For CORS errors, verify the frontend origin and backend API URL rather than disabling access controls.
+## ที่มาและเครดิต
 
-## Portfolio demo workflows
-
-- Logout, password changes and administrator password resets revoke existing access and refresh tokens. Each protected request checks the current account role. After upgrading to the session-version migration, sign in again; older tokens are rejected.
-- Room occupancy is controlled by active contracts. Manually marking an occupied room as available (or an empty room as occupied) returns a conflict. Bulk room creation rolls back the entire batch if any room fails.
-- Reports (`/admin/reports`) filter invoices by billing month, show billed/confirmed/outstanding totals, and export CSV. Confirmed totals belong to the invoice period, not the month cash was received.
-- Forgotten passwords use administrator-assisted recovery: the tenant contacts the apartment administrator, who verifies their identity and uses **กู้บัญชีผู้เช่า** to generate a temporary password. The tenant can then change it under **บัญชีของฉัน**. There is no automated reset email service; administrator-account recovery is outside this demo workflow.
-- Removing an avatar clears the image from that user's profile. It does not delete the cloud asset; cloud ownership verification and asset cleanup are deferred with the upload security work. Cloudinary is still required for real uploads.
-- Tenant profile editing saves only the signed-in account’s name and phone; roles, email and other accounts cannot be changed through this endpoint. Registration keeps a newly created account available for retry if contract creation fails; retry in the same page and retain the temporary password before leaving.
-- Integration tests also cover immediate token revocation, tenant password recovery, bulk rollback, room-status conflicts, report totals/access, and avatar removal. Cloudinary remains mocked.
-
-## Project origins and credits
-
-EasyApartment began as a student team project. This version is independently maintained by a member of the original team with the team's agreement. Credit for the original work goes to the EasyProperty Team; see the [original repository](https://github.com/kam345678/EasyApartment) for its contribution history.
+พัฒนาต่อโดย [313SAIKO](https://github.com/313SAIKO) จากงานกลุ่มของ **EasyProperty Team** โดยได้รับความยินยอมจากทีม เครดิตของงานต้นฉบับและประวัติการร่วมพัฒนาอยู่ที่ [repository ต้นฉบับ](https://github.com/kam345678/EasyApartment)

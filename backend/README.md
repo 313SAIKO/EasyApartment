@@ -1,115 +1,94 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# EasyApartment Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API สำหรับผู้ดูแลและผู้เช่า พัฒนาด้วย NestJS, PostgreSQL และ Prisma
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+[กลับหน้าหลัก](../README.md) · [คู่มือ Frontend](../frontend/README.md)
 
-## Description
+## ติดตั้งและรัน
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+ใช้ Node.js 24, npm และ PostgreSQL 18 สร้างฐานข้อมูลว่างชื่อ `easyapartment_dev` ก่อนเริ่ม
 
-## Project setup
+รันจากโฟลเดอร์ repository:
 
-```bash
-$ npm install
+```sh
+cd backend
+npm ci
 ```
 
-## Compile and run the project
+คัดลอก `.env.example` เป็น `.env` แล้วตั้งค่า:
 
-```bash
-# development
-$ npm run start
+| ตัวแปร | ค่าที่ต้องเตรียม |
+| --- | --- |
+| `DATABASE_URL` | URL ของ PostgreSQL ที่ชี้ไปยัง `easyapartment_dev` |
+| `JWT_ACCESS_SECRET` | สุ่ม secret สำหรับ access token |
+| `JWT_REFRESH_SECRET` | สุ่ม secret อีกค่าหนึ่งสำหรับ refresh token |
+| `SEED_PASSWORD` | รหัสผ่านบัญชีสาธิตอย่างน้อย 12 ตัวอักษร |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | จำเป็นเมื่อต้องการอัปโหลดรูปจริง |
 
-# watch mode
-$ npm run start:dev
+สร้าง secret ด้วยคำสั่งนี้ รันสองครั้งเพื่อให้ได้คนละค่า แล้วใส่ใน `.env` ของเครื่อง:
 
-# production mode
-$ npm run start:prod
+```sh
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-## Run tests
+เก็บรหัสผ่านและ secret ใน `.env` เท่านั้น ไม่ commit ไฟล์นี้
 
-```bash
-# unit tests
-$ npm run test
+เมื่อกำหนดค่าแล้ว รันจากโฟลเดอร์ `backend`:
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```sh
+npm run db:generate
+npm run db:migrate
+npm run db:seed
+npm run start:dev
 ```
 
-## Deployment
+API เปิดที่ [http://localhost:3000/api/v1](http://localhost:3000/api/v1) ส่วน CORS ตั้งให้รับ Frontend จาก `http://localhost:3001`
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Seed ทำงานเฉพาะฐานข้อมูล `easyapartment_dev` สร้างบัญชีและห้องตาม [รายการข้อมูลสาธิต](../README.md#local-setup) การรันซ้ำจะไม่เปลี่ยนรหัสผ่านหรือเขียนทับข้อมูลเดิม
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+<a id="testing"></a>
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+## การทดสอบ
+
+หลังตั้งค่า `.env` และ migrations แล้ว รันจากโฟลเดอร์ `backend`:
+
+```sh
+npm test -- --runInBand
+npm run test:e2e
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+| ชุดทดสอบ | สิ่งที่ตรวจ |
+| --- | --- |
+| `npm test` | Unit tests และสิทธิ์ API โดยใช้ฐานข้อมูลจำลอง |
+| `npm run test:e2e` | Build และตรวจ workflow กับ PostgreSQL จริง ตั้งแต่ login, session, สิทธิ์, ห้อง, สัญญา, บิล, มิเตอร์, แจ้งซ่อม ไปจนถึงรายงาน |
 
-## Resources
+Integration tests สร้างข้อมูลที่ระบุได้เฉพาะรอบทดสอบและลบเฉพาะข้อมูลนั้น ใช้ได้กับ `easyapartment_dev` เท่านั้น โดยจำลอง Cloudinary และ rate limiter จึงไม่ได้ทดสอบบริการอัปโหลดภายนอกหรือการจำกัดจำนวนคำขอจริง
 
-Check out a few resources that may come in handy when working with NestJS:
+อีกทางหนึ่ง ใช้ `npm run test:integration` เพื่อ build และรันตัวตรวจ PostgreSQL โดยตรง ชุดตรวจนี้เป็นตัวเดียวกับที่ `test:e2e` เรียกใช้ ไม่จำเป็นต้องรันซ้ำทั้งสองคำสั่ง
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## กติกาสำคัญของข้อมูล
 
-## Support
+- ห้องหนึ่งมีสัญญาที่ใช้งานได้ครั้งละหนึ่งฉบับ สถานะห้องสัมพันธ์กับสัญญา
+- การลบสัญญาเป็นการยกเลิกและเก็บประวัติ สัญญาที่ออกบิลแล้วไม่สามารถย้ายผู้เช่าหรือห้องได้
+- ค่าน้ำ 10 บาท/หน่วย และค่าไฟ 8 บาท/หน่วย คำนวณด้วย decimal
+- ลบได้เฉพาะบิลล่าสุดของห้องที่ยังไม่ชำระและไม่มีหลักฐานชำระเงิน โดยคืนเลขมิเตอร์ใน transaction เดียวกัน
+- รายงานสรุปตามเดือนของรอบบิล ยอดรับชำระนับเฉพาะบิลที่ผู้ดูแลยืนยันแล้ว
+- Logout, เปลี่ยนรหัสผ่าน และรีเซ็ตรหัสผ่านจะเพิกถอน session เดิม
+- การแก้โปรไฟล์บันทึกได้เฉพาะชื่อและเบอร์โทรของบัญชีที่เข้าสู่ระบบ
+- หากสร้างบัญชีสำเร็จแต่สร้างสัญญาล้มเหลว ให้ลองใหม่ในหน้าลงทะเบียนเดิม ระบบจะใช้บัญชีที่เพิ่งสร้าง เก็บรหัสผ่านชั่วคราวก่อนออกจากหน้า
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Schema และ SQL migrations อยู่ใน `prisma/` รหัสข้อมูลเป็น UUID โดย API คงฟิลด์ `_id` และรูปแบบข้อมูลซ้อนเดิมไว้เพื่อรองรับ Frontend
 
-## Stay in touch
+## Build และเปิดแบบไม่ใช้ watch
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-
-## สิ่งที่ต้องติดตั้ง aute & users
-  ```bash
-    npm install @nestjs/mongoose mongoose
-    npm install @nestjs/throttler
-    npm install @nestjs/jwt @nestjs/passport passport passport-jwt
-    npm install argon2
-    npm install @nestjs/config
-    npm install uuid
-    npm install class-validator class-transformer
-    
-  ```
-## cloudinary
-```bash 
-  npm install cloudinary multer multer-storage-cloudinary
-  npm install -D @types/multer
+```sh
+npm run build
+npm run start:prod
 ```
+
+## หากเปิดระบบไม่ได้
+
+- **เชื่อมต่อฐานข้อมูลไม่ได้:** ตรวจว่า PostgreSQL ทำงาน มีฐานข้อมูล `easyapartment_dev` และ `DATABASE_URL` ถูกต้อง
+- **ไม่พบตารางหรือคอลัมน์:** รัน `npm run db:migrate` ก่อนเปิด API
+- **CORS:** เปิด Frontend ผ่าน `http://localhost:3001` และตรวจ `NEXT_PUBLIC_API_URL` ใน Frontend
+- **อัปโหลดไม่ได้:** ตรวจค่าของ Cloudinary ใน `.env` การผ่าน integration tests ยังไม่ยืนยันว่าค่าบริการจริงถูกต้อง
